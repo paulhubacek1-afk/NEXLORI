@@ -1,16 +1,16 @@
-# Noctra Browser
+# Nexlori
 
 **Ein eigenständiger, ressourcenschonender Browser für Gaming, Musik, Individualität und das echte Leben.**
 
-Noctra Browser soll nicht einfach ein anderer Browser mit neuem Logo sein. Die Idee ist ein Browser mit eigener Identität, einer ruhigen und anpassbaren Oberfläche und Funktionen, die Rücksicht auf RAM, CPU, Akku und Datenverbrauch nehmen.
+Nexlori soll nicht einfach ein anderer Browser mit neuem Logo sein. Die Idee ist ein Browser mit eigener Identität, einer ruhigen und anpassbaren Oberfläche und Funktionen, die Rücksicht auf RAM, CPU, Akku und Datenverbrauch nehmen.
 
-> **Wichtig zum Projektstand:** Noctra ist derzeit ein Entwicklungsprojekt. Die Funktionen in dieser README beschreiben die Vision und Roadmap; sie sind noch nicht automatisch bereits implementiert oder einsatzbereit.
+> **Wichtig zum Projektstand:** Nexlori ist derzeit ein Entwicklungsprojekt. Die Funktionen in dieser README beschreiben die Vision und Roadmap; sie sind noch nicht automatisch bereits implementiert oder einsatzbereit.
 
 ## Die Grundidee
 
-Noctra soll eine **eigene Browser-Engine** erhalten. Das Projekt soll nicht einfach Microsoft Edge, Chromium, Electron, CEF oder WebView2 umverpacken. Ziel ist eine eigenständige Architektur, die schrittweise entwickelt und getestet wird. Sicherheit, Web-Kompatibilität und Standards sollen dabei von Anfang an berücksichtigt werden.
+Nexlori soll eine **eigene Browser-Engine** erhalten. Das Projekt soll nicht einfach Microsoft Edge, Chromium, Electron, CEF oder WebView2 umverpacken. Ziel ist eine eigenständige Architektur, die schrittweise entwickelt und getestet wird. Sicherheit, Web-Kompatibilität und Standards sollen dabei von Anfang an berücksichtigt werden.
 
-Eine Browser-Engine von Grund auf zu entwickeln, ist ein großes Vorhaben. Deshalb soll Noctra transparent zeigen, welche Webstandards bereits funktionieren und welche noch fehlen, anstatt vollständige Kompatibilität zu versprechen, bevor sie tatsächlich getestet wurde.
+Eine Browser-Engine von Grund auf zu entwickeln, ist ein großes Vorhaben. Deshalb soll Nexlori transparent zeigen, welche Webstandards bereits funktionieren und welche noch fehlen, anstatt vollständige Kompatibilität zu versprechen, bevor sie tatsächlich getestet wurde.
 
 ## Geplante Funktionen
 
@@ -23,18 +23,18 @@ Eine Browser-Engine von Grund auf zu entwickeln, ist ein großes Vorhaben. Desha
 
 ### Gaming-Erkennung und Gaming-Modus
 
-Noctra soll erkennen können, wann auf dem Gerät gerade gespielt wird, und den Browser darauf einstellen.
+Nexlori soll erkennen können, wann auf dem Gerät gerade gespielt wird, und den Browser darauf einstellen.
 
-- Bei erkanntem Spielstart kann Noctra optional in einen Gaming-Modus wechseln.
+- Bei erkanntem Spielstart kann Nexlori optional in einen Gaming-Modus wechseln.
 - Unnötige Hintergrundaktivitäten und Animationen sollen reduziert werden.
 - Benachrichtigungen können während des Spielens leiser gestellt oder pausiert werden.
-- Nach dem Spielen soll Noctra auf Wunsch wieder zu den normalen Einstellungen zurückkehren.
+- Nach dem Spielen soll Nexlori auf Wunsch wieder zu den normalen Einstellungen zurückkehren.
 
 **Datenschutzprinzip:** Die Erkennung soll freiwillig, transparent und lokal erfolgen. Sie soll keine Spielaktivitäten an einen Server melden. Nutzerinnen und Nutzer müssen die Funktion jederzeit abschalten können. Die konkrete Erkennung hängt vom Betriebssystem und den später verfügbaren Schnittstellen ab.
 
 ### Datensparmodus: weniger unnötiger Internetverkehr
 
-Noctra soll Datenverbrauch reduzieren, ohne ungefragt wichtige Inhalte zu verändern.
+Nexlori soll Datenverbrauch reduzieren, ohne ungefragt wichtige Inhalte zu verändern.
 
 - Automatische Medienwiedergabe standardmäßig vermeiden oder kontrollierbar machen.
 - Bilder bei Bedarf in einer niedrigeren Qualität laden.
@@ -43,7 +43,7 @@ Noctra soll Datenverbrauch reduzieren, ohne ungefragt wichtige Inhalte zu verän
 - Zwischenspeicherung sinnvoll nutzen und den Datenverbrauch verständlich anzeigen.
 - Einfache Schalter für den normalen Modus und einen besonders sparsamen Modus anbieten.
 
-Einige Seiten funktionieren mit blockierten Skripten oder Trackern möglicherweise nicht richtig. Deshalb soll der Schutz anpassbar bleiben. Noctra soll außerdem offen erklären, welche Einsparungen tatsächlich gemessen wurden, statt unbelegte Prozentwerte zu versprechen.
+Einige Seiten funktionieren mit blockierten Skripten oder Trackern möglicherweise nicht richtig. Deshalb soll der Schutz anpassbar bleiben. Nexlori soll außerdem offen erklären, welche Einsparungen tatsächlich gemessen wurden, statt unbelegte Prozentwerte zu versprechen.
 
 ### Musik-Popups und Mediensteuerung
 
@@ -59,7 +59,7 @@ Die Bedienung soll nur mit unterstützten Medienquellen funktionieren und keine 
 
 ### LGBTQ+-Themes und persönliche Gestaltung
 
-Noctra soll ein Browser sein, in dem Menschen ihre Persönlichkeit zeigen können.
+Nexlori soll ein Browser sein, in dem Menschen ihre Persönlichkeit zeigen können.
 
 - LGBTQ+-Themes, darunter verschiedene Pride-Farbwelten.
 - Frei einstellbare Akzentfarben, Hintergründe und Tab-Designs.
@@ -103,4 +103,4 @@ Die Reihenfolge kann sich während der Entwicklung ändern. Sicherheit und eine 
 
 Ideen, Fehlerberichte und Verbesserungsvorschläge sind willkommen. Bitte kennzeichne in Vorschlägen klar, ob es um eine bereits vorhandene Funktion oder um einen zukünftigen Wunsch geht.
 
-**Noctra Browser – dein Browser, deine Ressourcen, dein Stil.**
+**Nexlori – dein Browser, deine Ressourcen, dein Stil.**
