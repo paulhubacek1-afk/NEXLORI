@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 REPOSITORY = "paulhubacek1-afk/NEXLORI"
-RELEASES_API = f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=30"
+RELEASES_API = f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=100"
 MAX_EXE_BYTES = 400 * 1024 * 1024
 VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+]build[.-](\d+))?$", re.IGNORECASE)
 HASH_PATTERN = re.compile(r"^\s*([0-9a-fA-F]{64})\s+Nexlori\.exe\s*$", re.MULTILINE)
@@ -39,7 +39,7 @@ def find_update(current_version: str, releases: list[dict[str, Any]]) -> dict[st
     current = version_tuple(current_version)
     candidates = []
     for release in releases:
-        if not isinstance(release, dict) or release.get("draft"):
+        if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
             continue
         tag = str(release.get("tag_name", ""))
         try:
