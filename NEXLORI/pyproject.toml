@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexlori"
-version = "0.4.0"
-description = "Nexlori – experimenteller Prototyp (eigener Rendering-Kern und Browser-Logik)"
+version = "0.5.0"
+description = "Nexlori – personalisierbarer Chromium-Browser mit Themes, Mini-Player und verschlüsseltem Passwortmanager"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["Pillow>=10.1", "PySide6>=6.8,<7", "cryptography>=42.0"]
