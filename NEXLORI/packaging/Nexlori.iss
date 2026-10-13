@@ -1,6 +1,6 @@
 ; Nexlori Windows installer. Builds from dist/Nexlori.exe after PyInstaller completes.
 #ifndef MyAppVersion
-  #define MyAppVersion "0.5.0"
+  #define MyAppVersion "1.0.0"
 #endif
 
 [Setup]
@@ -31,14 +31,12 @@ UsePreviousGroup=yes
 Uninstallable=yes
 
 [Tasks]
-Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescription: "Zusätzliche Symbole:"; Flags: checkedonce
-
 [Files]
 Source: "..\dist\Nexlori.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Nexlori"; Filename: "{app}\Nexlori.exe"; IconFilename: "{app}\Nexlori.exe"; Comment: "Nexlori Browser"
-Name: "{autodesktop}\Nexlori"; Filename: "{app}\Nexlori.exe"; IconFilename: "{app}\Nexlori.exe"; Tasks: desktopicon; Comment: "Nexlori Browser"
+Name: "{autodesktop}\Nexlori"; Filename: "{app}\Nexlori.exe"; IconFilename: "{app}\Nexlori.exe"; Comment: "Nexlori Browser"
 
 [Run]
 Filename: "{app}\Nexlori.exe"; Description: "Nexlori jetzt starten"; Flags: postinstall nowait skipifsilent
