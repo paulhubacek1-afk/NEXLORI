@@ -8,7 +8,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -796,13 +795,9 @@ if (!window.__nexloriThemeObserver) {{
 
 def _selftest_webengine() -> tuple[bool, str]:
     """Run a tiny local-page and JavaScript check against the packaged WebEngine."""
-    from PySide6.QtGui import QColor
-
     app = QApplication.instance() or QApplication(["Nexlori-selftest"])
-    temp = tempfile.TemporaryDirectory(prefix="nexlori-webengine-test-")
-    profile = QWebEngineProfile("NexloriSelfTest", app)
-    profile.setPersistentStoragePath(temp.name)
-    profile.setCachePath(str(Path(temp.name) / "cache"))
+    # An off-the-record profile keeps this packaging check isolated from the user's real profile.
+    profile = QWebEngineProfile(app)
     page = QWebEnginePage(profile, app)
     loop = QEventLoop()
     result: dict[str, object] = {"ok": False, "title": ""}
@@ -824,7 +819,6 @@ def _selftest_webengine() -> tuple[bool, str]:
     page.deleteLater()
     profile.deleteLater()
     app.processEvents()
-    temp.cleanup()
     if not result.get("ok"):
         return False, str(result.get("error") or result.get("title") or "WebEngine JavaScript test timed out")
     return True, str(result["title"])
