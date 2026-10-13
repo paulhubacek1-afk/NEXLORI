@@ -1306,6 +1306,69 @@ QLabel {{ background:transparent; }}
         super().closeEvent(event)
 
 
+def _selftest_ubol_extension() -> tuple[bool, str]:
+    """Verify that the bundled uBlock Origin Lite can be installed and enabled in a persistent test profile."""
+    import tempfile
+
+    app = QApplication.instance() or QApplication(["Nexlori-uBOL-selftest"])
+    package = bundled_ubolite_path()
+    if package is None:
+        return False, "Das geprüfte uBlock-Origin-Lite-Paket fehlt."
+    temp = tempfile.TemporaryDirectory(prefix="nexlori-ubol-selftest-")
+    profile = None
+    try:
+        profile_root = Path(temp.name)
+        profile = QWebEngineProfile("NexloriUbolSelfTest", app)
+        profile.setPersistentStoragePath(str(profile_root / "profile"))
+        profile.setCachePath(str(profile_root / "cache"))
+        manager = profile.extensionManager()
+        loop = QEventLoop()
+        outcome: dict[str, object] = {}
+
+        def install_finished(extension) -> None:
+            name = str(extension.name() or "")
+            if extension_key_from_name(name) != "ublock-origin-lite":
+                return
+            if not extension.isInstalled() or not extension.isLoaded():
+                outcome["error"] = str(extension.error() or "uBlock Origin Lite wurde nicht korrekt geladen.")
+                loop.quit()
+                return
+            try:
+                manager.setExtensionEnabled(extension, True)
+                outcome["name"] = name
+                outcome["enabled"] = bool(extension.isEnabled())
+                outcome["error"] = str(extension.error() or "")
+            except Exception as exc:  # noqa: BLE001
+                outcome["error"] = f"{type(exc).__name__}: {exc}"
+            loop.quit()
+
+        manager.installFinished.connect(install_finished)
+        manager.installExtension(str(package))
+        QTimer.singleShot(45_000, loop.quit)
+        loop.exec()
+        try:
+            manager.installFinished.disconnect(install_finished)
+        except (RuntimeError, TypeError):
+            pass
+        if not outcome.get("name"):
+            return False, str(outcome.get("error") or "Installation von uBlock Origin Lite hat das Zeitlimit überschritten.")
+        if not outcome.get("enabled"):
+            return False, f"{outcome.get('name')} wurde installiert, ließ sich aber nicht aktivieren."
+        if outcome.get("error"):
+            return False, str(outcome["error"])
+        return True, f"{outcome['name']} installiert und aktiviert"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+    finally:
+        if profile is not None:
+            profile.deleteLater()
+            app.processEvents()
+        try:
+            temp.cleanup()
+        except OSError:
+            pass
+
+
 def _selftest_webengine() -> tuple[bool, str]:
     """Run a tiny local-page and JavaScript check against the packaged WebEngine."""
     app = QApplication.instance() or QApplication(["Nexlori-selftest"])
