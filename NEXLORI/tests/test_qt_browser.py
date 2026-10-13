@@ -1,5 +1,4 @@
-from nexlori.core.themes import BUILTIN_THEMES
-from nexlori.qt_browser import page_theme_css
+from nexlori.core.themes import BUILTIN_THEMES, page_theme_css
 
 
 def test_requested_themes_are_available():
