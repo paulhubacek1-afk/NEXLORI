@@ -637,6 +637,8 @@ QLabel {{ background:transparent; }}
             return
         self.theme = BUILTIN_THEMES[name]
         self.settings.theme = name
+        # Update the profile-level stylesheet too, so pages opened later receive the new theme.
+        self._refresh_page_theme_script()
         self._apply_browser_theme()
         for action_name, actions in self._theme_action_copies.items():
             for action in actions:
@@ -671,7 +673,8 @@ QLabel {{ background:transparent; }}
         script.setName("NexloriWebsiteTheme")
         script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
         script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
-        script.setRunsOnSubFrames(False)
+        # Pages often render their actual content in an iframe; theme those documents too.
+        script.setRunsOnSubFrames(True)
         script.setSourceCode(self._build_page_theme_script(self.settings.adapt_page_theme))
         scripts.insert(script)
         self._page_theme_script = script
