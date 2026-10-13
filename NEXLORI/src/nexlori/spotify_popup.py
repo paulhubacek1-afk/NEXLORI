@@ -1,10 +1,7 @@
 """A compact Spotify popup using Nexlori's shared Chromium profile."""
 from __future__ import annotations
 
-import re
-from urllib.parse import urlsplit
-
-from PySide6.QtCore import QPoint, QUrl, Qt
+from PySide6.QtCore import QUrl, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -15,37 +12,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
 )
-from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
-
-_SPOTIFY_TYPES = {"track", "album", "playlist", "episode", "show", "artist"}
-
-
-def normalize_spotify_url(value: str) -> str:
-    value = value.strip()
-    if not value:
-        return "https://open.spotify.com/"
-    if not re.match(r"^https://", value, re.IGNORECASE):
-        value = "https://" + value
-    parts = urlsplit(value)
-    if parts.scheme.lower() != "https" or (parts.hostname or "").lower() not in {
-        "open.spotify.com", "www.open.spotify.com"
-    }:
-        raise ValueError("Bitte einen Link von https://open.spotify.com einfügen.")
-    path = parts.path.rstrip("/")
-    segments = [segment for segment in path.split("/") if segment]
-    if segments and segments[0] == "embed":
-        if len(segments) < 2 or segments[1] not in _SPOTIFY_TYPES:
-            raise ValueError("Dieser Spotify-Einbettungstyp wird nicht unterstützt.")
-        return f"https://open.spotify.com{path}"
-    if len(segments) >= 2 and segments[0] in _SPOTIFY_TYPES:
-        kind, item_id = segments[0], segments[1]
-        if not re.fullmatch(r"[A-Za-z0-9]{10,64}", item_id):
-            raise ValueError("Der Spotify-Link enthält keine gültige Inhalts-ID.")
-        return f"https://open.spotify.com/embed/{kind}/{item_id}?utm_source=generator"
-    return "https://open.spotify.com/"
-
+from .spotify_links import normalize_spotify_url
 
 class SpotifyPopup(QDialog):
     """Small detachable player; it shares the browser profile so the user can sign in themselves."""
@@ -86,9 +56,7 @@ class SpotifyPopup(QDialog):
 
         self.view = QWebEngineView(self)
         self.view.setPage(QWebEnginePage(profile, self.view))
-        self.view.settings().setAttribute(
-            self.view.settings().WebAttribute.JavascriptEnabled, True
-        )
+        self.view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         self.view.load(QUrl("https://open.spotify.com/"))
         root.addWidget(self.view, 1)
 
@@ -109,8 +77,12 @@ class SpotifyPopup(QDialog):
             QMessageBox.warning(self, "Spotify-Link", str(exc))
             return
         self.status.setText("Spotify wird geladen …")
-        self.view.setUrl(QUrl(target))
+        try:
+            self.view.loadFinished.disconnect(self._load_finished)
+        except (RuntimeError, TypeError):
+            pass
         self.view.loadFinished.connect(self._load_finished)
+        self.view.setUrl(QUrl(target))
 
     def _load_finished(self, ok: bool) -> None:
         self.status.setText(
