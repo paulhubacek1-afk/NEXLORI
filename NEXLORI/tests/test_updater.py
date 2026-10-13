@@ -5,7 +5,7 @@ import pytest
 from nexlori.updater import UpdateError, download_verified_update, find_update, version_tuple
 
 
-def release(version, *, draft=False, include_assets=True):
+def release(version, *, draft=False, prerelease=False, include_assets=True):
     assets = []
     if include_assets:
         assets = [
@@ -15,6 +15,7 @@ def release(version, *, draft=False, include_assets=True):
     return {
         "tag_name": f"v{version}",
         "draft": draft,
+        "prerelease": prerelease,
         "html_url": f"https://github.com/paulhubacek1-afk/NEXLORI/releases/tag/v{version}",
         "body": "Release notes",
         "assets": assets,
@@ -42,6 +43,14 @@ def test_find_update_selects_newest_complete_non_draft_release():
 
 def test_no_newer_update_returns_none():
     assert find_update("0.4.0", [release("0.3.9"), release("0.4.0")]) is None
+
+def test_prerelease_builds_are_never_offered_as_stable_updates():
+    assert find_update("1.0.0", [
+        release("1.0.0-build.99", prerelease=True),
+        release("1.0.0"),
+    ]) is None
+    update = find_update("1.0.0", [release("1.0.1-build.100", prerelease=True), release("1.0.1")])
+    assert update["tag_name"] == "v1.0.1"
 
 
 def test_verified_download_accepts_valid_sha256(monkeypatch, tmp_path):
