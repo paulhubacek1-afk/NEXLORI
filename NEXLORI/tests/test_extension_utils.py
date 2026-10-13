@@ -63,7 +63,7 @@ def test_manifest_v2_is_rejected(tmp_path):
         tmp_path / "v2.zip",
         {"manifest_version": 2, "name": "Old extension", "version": "1.0"},
     )
-    with pytest.raises(ExtensionPackageError, match="Manifest V3"):
+    with pytest.raises(ExtensionPackageError, match="Manifest-V3"):
         inspect_extension_package(path)
 
 
