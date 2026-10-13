@@ -17,7 +17,7 @@ def normalize_spotify_url(value: str) -> str:
     if parts.scheme.lower() != "https" or (parts.hostname or "").lower() not in {
         "open.spotify.com", "www.open.spotify.com"
     }:
-        raise ValueError("Bitte einen Link von https://open.spotify.com einfügen.")
+        raise ValueError("Bitte einen gültigen Spotify-Link von https://open.spotify.com einfügen.")
     path = parts.path.rstrip("/")
     segments = [segment for segment in path.split("/") if segment]
     if segments and segments[0] == "embed":
