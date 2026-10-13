@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
@@ -40,6 +41,7 @@ from PySide6.QtWebEngineCore import (
     QWebEngineDownloadRequest,
     QWebEnginePage,
     QWebEngineProfile,
+    QWebEngineScript,
     QWebEngineSettings,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -47,7 +49,9 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
-from .core.themes import BUILTIN_THEMES, Theme, page_theme_css
+from .core.themes import BUILTIN_THEMES, Theme
+from .extension_utils import bundled_ubolite_path, extension_key_from_name
+from .page_theme import build_page_theme_script
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
@@ -155,7 +159,10 @@ class BrowserPage(QWebEnginePage):
         self.owner = owner
 
     def createWindow(self, _window_type):  # noqa: N802
-        # Open target=_blank, window.open and similar links in a Nexlori tab.
+        # Website popups can be blocked or opened in a Nexlori tab from Settings.
+        if not self.owner.settings.allow_web_popups:
+            self.owner.statusBar().showMessage("Ein Website-Popup wurde durch Nexlori blockiert.", 3500)
+            return None
         view = self.owner.new_tab(start_page=False, activate=True)
         return view.page()
 
@@ -199,6 +206,14 @@ class NexloriWindow(QMainWindow):
         )
         self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
         self.profile.downloadRequested.connect(self._download_requested)
+        self._page_theme_script = None
+        self._refresh_page_theme_script()
+        try:
+            self.extension_manager = self.profile.extensionManager()
+            self.extension_manager.installFinished.connect(self._on_extension_installed)
+            self.extension_manager.loadFinished.connect(lambda *_: self._sync_extension_states())
+        except AttributeError:
+            self.extension_manager = None
 
         self.setWindowTitle("Nexlori")
         self.setWindowIcon(_qt_app_icon())
@@ -210,7 +225,9 @@ class NexloriWindow(QMainWindow):
         view = self.new_tab(start_page=start_url is None, activate=True)
         if start_url:
             self.navigate_view(view, start_url)
-        QTimer.singleShot(2500, self._start_silent_update_check)
+        QTimer.singleShot(1200, self._ensure_default_extension)
+        if self.settings.auto_update_check:
+            QTimer.singleShot(2500, self._start_silent_update_check)
 
     def _build_ui(self) -> None:
         root = QWidget(self)
