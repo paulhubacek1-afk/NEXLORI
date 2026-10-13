@@ -227,8 +227,7 @@ class NexloriWindow(QMainWindow):
             self.navigate_view(view, start_url)
         QTimer.singleShot(1200, self._ensure_default_extension)
         if self.settings.auto_update_check:
-            QTimer.singleShot(1200, self._ensure_default_extension)
-        if self.settings.auto_update_check:
+            if self.settings.auto_update_check:
             QTimer.singleShot(2500, self._start_silent_update_check)
 
     def _build_ui(self) -> None:
