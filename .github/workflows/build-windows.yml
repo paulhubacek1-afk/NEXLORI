@@ -113,6 +113,36 @@ jobs:
             throw "Die EXE hat keine Selbsttest-Datei geschrieben."
           }
 
+      - name: Echtes Browserfenster starten und prüfen
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "dist\Nexlori.exe"
+          $log = Join-Path $PWD "gui-smoke-test.txt"
+          $process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $log -RedirectStandardError $log
+          $deadline = (Get-Date).AddSeconds(35)
+          $windowFound = $false
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 500
+            $process.Refresh()
+            if ($process.HasExited) {
+              $details = if (Test-Path $log) { Get-Content $log -Raw } else { "(keine Konsolenausgabe; GUI-Prozess wurde beendet)" }
+              throw "Nexlori wurde beendet, bevor das Browserfenster erschien. Exit-Code: $($process.ExitCode). $details"
+            }
+            if ($process.MainWindowHandle -ne 0) {
+              $windowFound = $true
+              break
+            }
+          }
+          if (-not $windowFound) {
+            & taskkill.exe /PID $process.Id /T /F | Out-Null
+            throw "Nexlori hat innerhalb von 35 Sekunden kein Browserfenster geöffnet."
+          }
+          Write-Host "GUI-Start erfolgreich: Fensterhandle $($process.MainWindowHandle)"
+          $process.CloseMainWindow() | Out-Null
+          if (-not $process.WaitForExit(10000)) {
+            & taskkill.exe /PID $process.Id /T /F | Out-Null
+          }
+
       - name: SHA-256-Prüfsumme erzeugen
         shell: pwsh
         run: |
