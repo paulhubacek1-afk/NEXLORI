@@ -37,17 +37,27 @@ def selftest(out_path: str | None = None) -> int:
     except Exception as exc:  # noqa: BLE001
         _write(out_path, f"FEHLER Tk: {type(exc).__name__}: {exc}")
         return 3
+    _write(out_path, "CHECK: renderer and Tk passed; testing Chromium WebEngine")
     try:
-        from .qt_browser import _selftest_webengine
+        from .qt_browser import _selftest_ubol_package, _selftest_webengine
 
         ok, detail = _selftest_webengine()
         if not ok:
             _write(out_path, f"FEHLER Chromium-WebEngine: {detail}")
             return 4
+        _write(out_path, "CHECK: Chromium WebEngine passed; validating bundled uBlock Origin Lite package")
+        ubol_ok, ubol_detail = _selftest_ubol_package()
+        if not ubol_ok:
+            _write(out_path, f"FEHLER uBlock Origin Lite: {ubol_detail}")
+            return 5
     except Exception as exc:  # noqa: BLE001
-        _write(out_path, f"FEHLER Chromium-WebEngine: {type(exc).__name__}: {exc}")
-        return 4
-    _write(out_path, f"OK Nexlori {__version__} · Renderer {len(texts)} Textelemente · Chromium-WebEngine {detail}")
+        _write(out_path, f"FEHLER Chromium-WebEngine/Add-ons: {type(exc).__name__}: {exc}")
+        return 5
+    _write(
+        out_path,
+        f"OK Nexlori {__version__} · Renderer {len(texts)} Textelemente · "
+        f"Chromium-WebEngine {detail} · {ubol_detail}",
+    )
     return 0
 
 

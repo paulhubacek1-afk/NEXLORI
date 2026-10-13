@@ -4,6 +4,7 @@ The legacy renderer is kept for educational rendering tests; real pages are rend
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -11,11 +12,17 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QEventLoop, QPoint, QTimer, QUrl, Qt
-from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtCore import QEventLoop, QPoint, QThread, QTimer, QUrl, Qt, Signal
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -23,6 +30,8 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QProgressBar,
+    QScrollArea,
+    QSpinBox,
     QTabWidget,
     QToolButton,
     QVBoxLayout,
@@ -32,16 +41,40 @@ from PySide6.QtWebEngineCore import (
     QWebEngineDownloadRequest,
     QWebEnginePage,
     QWebEngineProfile,
+    QWebEngineScript,
     QWebEngineSettings,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
+from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
-from .core.themes import BUILTIN_THEMES, Theme, page_theme_css
+from .core.themes import BUILTIN_THEMES, Theme
+from .extension_utils import (
+    bundled_ubolite_path,
+    extension_key_from_info,
+    extension_key_from_name,
+    extension_name_from_info,
+    is_builtin_extension,
+  )
+from .page_theme import build_page_theme_script
 
 APP_NAME = "Nexlori"
-APP_VERSION = "0.3.0"
+APP_VERSION = __version__
+FEEDBACK_EMAIL = "nexlori-browser@gmx.at"
+REPOSITORY_URL = "https://github.com/paulhubacek1-afk/NEXLORI"
+
+
+def _qt_app_icon() -> QIcon:
+    """Create the same Pride-N icon used for the executable and installer."""
+    from .icon import make_icon
+
+    image = make_icon(256)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    pixmap = QPixmap()
+    pixmap.loadFromData(buffer.getvalue(), "PNG")
+    return QIcon(pixmap)
 
 
 def _theme_gradient(theme: Theme) -> str:
@@ -100,13 +133,42 @@ class AddressBar(QLineEdit):
         QTimer.singleShot(0, self.selectAll)
 
 
+class UpdateWorker(QThread):
+    """Runs update network requests away from the browser UI thread."""
+
+    def __init__(self, task: str, *, release: dict | None = None, update_dir: Path | None = None, parent=None):
+        super().__init__(parent)
+        self.task = task
+        self.release = release
+        self.update_dir = update_dir
+        self.result_data: dict = {"task": task}
+
+    def run(self) -> None:
+        try:
+            from .updater import check_for_update, download_verified_update
+            if self.task == "check":
+                self.result_data["release"] = check_for_update(APP_VERSION)
+            elif self.task == "download":
+                if not self.release or self.update_dir is None:
+                    raise RuntimeError("Update-Informationen fehlen.")
+                self.result_data["path"] = str(download_verified_update(self.release, self.update_dir))
+                self.result_data["release"] = self.release
+            else:
+                raise RuntimeError("Unbekannte Update-Aktion.")
+        except Exception as exc:  # noqa: BLE001
+            self.result_data["error"] = str(exc)
+
+
 class BrowserPage(QWebEnginePage):
     def __init__(self, profile: QWebEngineProfile, owner: "NexloriWindow", parent: QWidget):
         super().__init__(profile, parent)
         self.owner = owner
 
     def createWindow(self, _window_type):  # noqa: N802
-        # Open target=_blank, window.open and similar links in a Nexlori tab.
+        # Website popups can be blocked or opened in a Nexlori tab from Settings.
+        if not self.owner.settings.allow_web_popups:
+            self.owner.statusBar().showMessage("Ein Website-Popup wurde durch Nexlori blockiert.", 3500)
+            return None
         view = self.owner.new_tab(start_page=False, activate=True)
         return view.page()
 
@@ -137,6 +199,9 @@ class NexloriWindow(QMainWindow):
         self.bookmarks = self._load_bookmarks()
         self._closing = False
         self._self_test = self_test
+        self._update_worker: UpdateWorker | None = None
+        self._silent_update_check = True
+        self._spotify_popup = None
         self.theme = BUILTIN_THEMES.get(settings.theme, BUILTIN_THEMES["dunkel"])
 
         self.profile = QWebEngineProfile("Nexlori", self)
@@ -147,8 +212,17 @@ class NexloriWindow(QMainWindow):
         )
         self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
         self.profile.downloadRequested.connect(self._download_requested)
+        self._page_theme_script = None
+        self._refresh_page_theme_script()
+        try:
+            self.extension_manager = self.profile.extensionManager()
+            self.extension_manager.installFinished.connect(self._on_extension_installed)
+            self.extension_manager.loadFinished.connect(lambda *_: self._sync_extension_states())
+        except AttributeError:
+            self.extension_manager = None
 
         self.setWindowTitle("Nexlori")
+        self.setWindowIcon(_qt_app_icon())
         self.resize(1240, 820)
         self.setMinimumSize(760, 480)
         self._build_ui()
@@ -157,6 +231,9 @@ class NexloriWindow(QMainWindow):
         view = self.new_tab(start_page=start_url is None, activate=True)
         if start_url:
             self.navigate_view(view, start_url)
+        QTimer.singleShot(1200, self._ensure_default_extension)
+        if self.settings.auto_update_check:
+            QTimer.singleShot(2500, self._start_silent_update_check)
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -203,16 +280,23 @@ class NexloriWindow(QMainWindow):
         for button in (self.back_button, self.forward_button, self.reload_button, self.home_button):
             nav.addWidget(button)
 
+        # Keep the address/search pill visually centered between the navigation and tool clusters.
+        nav.addStretch(1)
         self.address = AddressBar(toolbar)
         self.address.setObjectName("addressBar")
         self.address.setPlaceholderText("Suchen oder Webadresse eingeben")
         self.address.setClearButtonEnabled(True)
         self.address.setMinimumHeight(42)
+        self.address.setMinimumWidth(220)
+        self.address.setMaximumWidth(self.settings.toolbar_search_width)
         self.address.returnPressed.connect(self.navigate_address)
-        nav.addWidget(self.address, 1)
+        nav.addWidget(self.address, 0)
+        nav.addStretch(1)
 
         self.bookmark_button = self._tool("☆", "Lesezeichen hinzufügen/entfernen", self.toggle_bookmark)
         nav.addWidget(self.bookmark_button)
+        self.music_button = self._tool("♫", "Spotify Mini-Player", self.show_spotify_popup)
+        nav.addWidget(self.music_button)
         self.page_theme_button = QToolButton(toolbar)
         self.page_theme_button.setText("Aa")
         self.page_theme_button.setToolTip("Webseite an das aktive Theme anpassen")
@@ -226,6 +310,13 @@ class NexloriWindow(QMainWindow):
         nav.addWidget(self.theme_button)
         self.more_button = self._tool("⋮", "Nexlori-Menü", self.show_more_menu)
         nav.addWidget(self.more_button)
+        self.toolbar_icons = {
+            "home": self.home_button,
+            "bookmark": self.bookmark_button,
+            "spotify": self.music_button,
+            "page_theme": self.page_theme_button,
+            "theme": self.theme_button,
+        }
         outer.addWidget(toolbar)
 
         self.find_bar = QWidget(root)
@@ -256,6 +347,7 @@ class NexloriWindow(QMainWindow):
 
         self.setCentralWidget(root)
         self.statusBar().showMessage("Nexlori · Chromium-WebEngine")
+        self._apply_toolbar_preferences()
         self._build_theme_menu()
         self._build_more_menu()
 
@@ -273,10 +365,24 @@ class NexloriWindow(QMainWindow):
         self.theme_menu.setTitle("Theme")
         self.theme_actions: dict[str, QAction] = {}
         self.theme_action_group = QActionGroup(self)
-        self.theme_action_group.setExclusive(True)
+        # A theme can occur in the three-favourites submenu and in the full list.
+        # Let set_theme synchronise every copy rather than letting Qt uncheck duplicates.
+        self.theme_action_group.setExclusive(False)
+        self._theme_action_copies: dict[str, list[QAction]] = {}
+
+        favourites = self.theme_menu.addMenu("Deine 3 Pride-Favoriten")
+        chosen = [name for name in self.settings.pride_favorites if name in BUILTIN_THEMES]
+        if not chosen:
+            action = favourites.addAction("Noch keine Favoriten ausgewählt")
+            action.setEnabled(False)
+        for name in chosen:
+            self._add_theme_action(favourites, name)
+        favourites.addSeparator()
+        favourites.addAction("Favoriten auswählen …", self.edit_pride_favorites)
+
         groups = (
             ("Basis", [n for n in ("hell", "dunkel", "ruhig", "hochkontrast") if n in BUILTIN_THEMES]),
-            ("Pride", [n for n in BUILTIN_THEMES if n.startswith("pride-")]),
+            ("Alle Pride-Flaggen", [n for n in BUILTIN_THEMES if n.startswith("pride-")]),
             ("Weitere Looks", [n for n in BUILTIN_THEMES if n not in {"hell", "dunkel", "ruhig", "hochkontrast"} and not n.startswith("pride-")]),
         )
         for label, names in groups:
@@ -284,14 +390,167 @@ class NexloriWindow(QMainWindow):
                 continue
             submenu = self.theme_menu.addMenu(label)
             for name in names:
-                theme = BUILTIN_THEMES[name]
-                action = QAction(theme.label, self)
-                action.setCheckable(True)
-                action.setChecked(name == self.settings.theme)
-                self.theme_action_group.addAction(action)
-                self.theme_actions[name] = action
-                action.triggered.connect(lambda _checked=False, n=name: self.set_theme(n))
-                submenu.addAction(action)
+                self._add_theme_action(submenu, name)
+        self.theme_menu.addSeparator()
+        self.theme_menu.addAction("Drei Pride-Favoriten auswählen …", self.edit_pride_favorites)
+
+    def _add_theme_action(self, menu: QMenu, name: str) -> None:
+        theme = BUILTIN_THEMES[name]
+        # The same theme can appear in both favourites and the full collection.
+        action = QAction(theme.label, self, checkable=True)
+        action.setChecked(name == self.settings.theme)
+        action.triggered.connect(lambda _checked=False, n=name: self.set_theme(n))
+        menu.addAction(action)
+        self.theme_action_group.addAction(action)
+        self._theme_action_copies.setdefault(name, []).append(action)
+        self.theme_actions.setdefault(name, action)
+
+    def edit_pride_favorites(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Deine drei Pride-Favoriten")
+        dialog.resize(440, 520)
+        layout = QVBoxLayout(dialog)
+        note = QLabel("Wähle bis zu drei Pride-Flaggen für den Schnellzugriff im Theme-Menü.", dialog)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        list_layout = QVBoxLayout(content)
+        pride_names = [name for name in BUILTIN_THEMES if name.startswith("pride-")]
+        checks: dict[str, QCheckBox] = {}
+        initial = set(self.settings.pride_favorites)
+        count = QLabel("", dialog)
+
+        def update_count() -> None:
+            selected_count = sum(1 for checkbox in checks.values() if checkbox.isChecked())
+            count.setText(f"{selected_count}/3 ausgewählt")
+
+        def changed(checked: bool, own_name: str) -> None:
+            if checked and sum(1 for checkbox in checks.values() if checkbox.isChecked()) > 3:
+                checks[own_name].blockSignals(True)
+                checks[own_name].setChecked(False)
+                checks[own_name].blockSignals(False)
+                QMessageBox.information(dialog, "Maximal drei", "Du kannst genau bis zu drei Pride-Favoriten speichern.")
+            update_count()
+
+        for name in pride_names:
+            checkbox = QCheckBox(BUILTIN_THEMES[name].label, content)
+            checkbox.setChecked(name in initial)
+            checkbox.toggled.connect(lambda checked, n=name: changed(checked, n))
+            checks[name] = checkbox
+            list_layout.addWidget(checkbox)
+        list_layout.addStretch(1)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+        layout.addWidget(count)
+        update_count()
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.settings.pride_favorites = [name for name in pride_names if checks[name].isChecked()]
+            self._save_settings()
+            self._build_theme_menu()
+            self.statusBar().showMessage("Pride-Favoriten gespeichert.", 2500)
+
+    def _apply_toolbar_preferences(self) -> None:
+        for name, button in self.toolbar_icons.items():
+            button.setVisible(name in self.settings.toolbar_visible_icons)
+        self.address.setMaximumWidth(self.settings.toolbar_search_width)
+        self.address.setMinimumWidth(min(220, self.settings.toolbar_search_width))
+        self._apply_browser_theme()
+
+    def customize_toolbar(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nexlori oben anpassen")
+        dialog.setMinimumWidth(470)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Passe die zentrierte Suchleiste, die Icon-Größe und die sichtbaren Schnellzugriffe an. "
+            "Das Seiten-Theme-CSS bleibt davon unberührt.",
+            dialog,
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        form = QFormLayout()
+        search_width = QSpinBox(dialog)
+        search_width.setRange(360, 1000)
+        search_width.setSingleStep(40)
+        search_width.setSuffix(" px")
+        search_width.setValue(self.settings.toolbar_search_width)
+        form.addRow("Breite der Suchleiste", search_width)
+
+        icon_size = QSpinBox(dialog)
+        icon_size.setRange(14, 30)
+        icon_size.setSuffix(" px")
+        icon_size.setValue(self.settings.toolbar_icon_size)
+        form.addRow("Icon-Größe", icon_size)
+
+        search_engine = QComboBox(dialog)
+        providers = {
+            "DuckDuckGo": "https://duckduckgo.com/?q={}",
+            "Google": "https://www.google.com/search?q={}",
+            "Bing": "https://www.bing.com/search?q={}",
+            "Ecosia": "https://www.ecosia.org/search?q={}",
+        }
+        for label, url in providers.items():
+            search_engine.addItem(label, url)
+        selected = search_engine.findData(self.settings.search_url)
+        if selected < 0 and "duckduckgo" in self.settings.search_url.lower():
+            selected = 0
+        if selected >= 0:
+            search_engine.setCurrentIndex(selected)
+        form.addRow("Suchmaschine", search_engine)
+        layout.addLayout(form)
+
+        icon_group = QWidget(dialog)
+        icon_layout = QVBoxLayout(icon_group)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_layout.addWidget(QLabel("Schnellzugriffe anzeigen", icon_group))
+        labels = {
+            "home": "Startseite",
+            "bookmark": "Lesezeichen",
+            "spotify": "Spotify Mini-Player",
+            "page_theme": "Website-Farben (Aa)",
+            "theme": "Theme-Auswahl",
+        }
+        checks: dict[str, QCheckBox] = {}
+        for name, label in labels.items():
+            check = QCheckBox(label, icon_group)
+            check.setChecked(name in self.settings.toolbar_visible_icons)
+            checks[name] = check
+            icon_layout.addWidget(check)
+        layout.addWidget(icon_group)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.settings.toolbar_search_width = search_width.value()
+        self.settings.toolbar_icon_size = icon_size.value()
+        if search_engine.currentData():
+            self.settings.search_url = str(search_engine.currentData())
+        self.settings.toolbar_visible_icons = [
+            name for name, check in checks.items() if check.isChecked()
+        ]
+        self._save_settings()
+        self._apply_toolbar_preferences()
+        self.statusBar().showMessage("Deine Browserleiste wurde angepasst.", 3000)
+
+    def open_feedback_email(self) -> None:
+        QDesktopServices.openUrl(QUrl(f"mailto:{FEEDBACK_EMAIL}?subject=Nexlori%20-%20Anliegen%20oder%20Verbesserung"))
+
+    def open_feedback_github(self) -> None:
+        QDesktopServices.openUrl(QUrl(f"{REPOSITORY_URL}/issues/new?title=Nexlori%20Feedback"))
 
     def _build_more_menu(self) -> None:
         self.more_menu = QMenu(self)
@@ -299,9 +558,19 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Lesezeichen", self.show_bookmarks_menu, QKeySequence("Ctrl+Shift+B"))
         self.more_menu.addAction("Verlauf dieser Sitzung", self.show_history_menu)
         self.more_menu.addSeparator()
+        self.more_menu.addAction("Spotify Mini-Player", self.show_spotify_popup, QKeySequence("Ctrl+Shift+M"))
+        self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
+        self.more_menu.addAction("Add-ons verwalten", self.show_extensions_manager)
+        self.more_menu.addAction("Einstellungen", self.show_settings, QKeySequence("Ctrl+,"))
+        self.more_menu.addAction("Browserleiste anpassen …", self.customize_toolbar)
+        self.more_menu.addSeparator()
         self.more_menu.addAction("Downloads-Ordner öffnen", self.open_download_folder)
         self.more_menu.addAction("Webseite neu laden", self.reload_current, QKeySequence("F5"))
         self.more_menu.addAction("Theme auswählen", self.show_theme_menu)
+        self.more_menu.addAction("Nach Updates suchen", self.check_for_updates)
+        self.more_menu.addSeparator()
+        self.more_menu.addAction("Feedback per E-Mail …", self.open_feedback_email)
+        self.more_menu.addAction("Verbesserung auf GitHub melden …", self.open_feedback_github)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Über Nexlori", self.show_about)
         self.more_menu.addAction("Beenden", self.close, QKeySequence("Alt+F4"))
@@ -318,6 +587,9 @@ class NexloriWindow(QMainWindow):
             ("Alt+Home", self.go_home),
             ("Ctrl+F", self.show_find),
             ("Ctrl+D", self.toggle_bookmark),
+            ("Ctrl+Shift+M", self.show_spotify_popup),
+            ("Ctrl+Shift+P", self.show_password_manager),
+            ("Ctrl+,", self.show_settings),
             ("Ctrl+Plus", lambda: self.change_zoom(0.1)),
             ("Ctrl+Minus", lambda: self.change_zoom(-0.1)),
             ("Ctrl+0", lambda: self.set_zoom(1.0)),
@@ -331,6 +603,7 @@ class NexloriWindow(QMainWindow):
 
     def _apply_browser_theme(self) -> None:
         theme = self.theme
+        icon_px = self.settings.toolbar_icon_size
         self.setStyleSheet(f"""
 QMainWindow, QWidget {{ background:{theme.bg}; color:{theme.fg}; }}
 QWidget#toolbar {{ background:{theme.bg}; }}
@@ -340,10 +613,10 @@ QTabBar::tab {{ background:{theme.surface}; color:{theme.fg}; border:1px solid t
  border-top-left-radius:10px; border-top-right-radius:10px; padding:10px 13px; margin-right:3px; min-width:90px; }}
 QTabBar::tab:selected {{ background:{theme.bg}; border-color:{theme.surface}; border-bottom:2px solid {theme.accent}; }}
 QTabBar::tab:hover {{ background:{theme.bg}; }}
-QToolButton {{ color:{theme.fg}; background:transparent; border:0; border-radius:12px; min-width:34px; min-height:34px; padding:3px; font-size:17px; }}
+QToolButton {{ color:{theme.fg}; background:transparent; border:0; border-radius:12px; min-width:{icon_px + 16}px; min-height:{icon_px + 16}px; padding:3px; font-size:{icon_px}px; }}
 QToolButton:hover {{ background:{theme.surface}; }}
 QToolButton:pressed, QToolButton:checked {{ background:{theme.surface}; color:{theme.accent}; }}
-QToolButton#newTabButton {{ font-size:21px; min-width:36px; min-height:36px; }}
+QToolButton#newTabButton {{ font-size:{icon_px + 3}px; min-width:{icon_px + 18}px; min-height:{icon_px + 18}px; }}
 QLineEdit {{ background:{theme.surface}; color:{theme.fg}; selection-background-color:{theme.accent}; selection-color:{theme.bg}; border:1px solid {theme.surface}; border-radius:16px; padding:9px 15px; }}
 QLineEdit:focus {{ border:1px solid {theme.accent}; }}
 QLineEdit#addressBar {{ font-size:14px; }}
@@ -364,9 +637,12 @@ QLabel {{ background:transparent; }}
             return
         self.theme = BUILTIN_THEMES[name]
         self.settings.theme = name
+        # Update the profile-level stylesheet too, so pages opened later receive the new theme.
+        self._refresh_page_theme_script()
         self._apply_browser_theme()
-        for action_name, action in self.theme_actions.items():
-            action.setChecked(action_name == name)
+        for action_name, actions in self._theme_action_copies.items():
+            for action in actions:
+                action.setChecked(action_name == name)
         self._save_settings()
         for index in range(self.tabs.count()):
             view = self.tabs.widget(index)
@@ -383,41 +659,34 @@ QLabel {{ background:transparent; }}
         return QColor(value)
 
     def _build_page_theme_script(self, enabled: bool) -> str:
-        css = page_theme_css(self.theme)
-        css_literal = json.dumps(css)
-        return f"""(() => {{
-const id = 'nexlori-theme-user-style';
-window.__nexloriThemeConfig = {{enabled:{str(enabled).lower()}, css:{css_literal}}};
-const remove = () => {{ const old = document.getElementById(id); if (old) old.remove(); }};
-const ensure = () => {{
-  const config = window.__nexloriThemeConfig;
-  if (!document.documentElement) return;
-  if (!config.enabled) {{ remove(); return; }}
-  let style = document.getElementById(id);
-  if (!style) {{
-    style = document.createElement('style');
-    style.id = id;
-    (document.head || document.documentElement).appendChild(style);
-  }}
-  if (style.textContent !== config.css) style.textContent = config.css;
-}};
-ensure();
-if (!window.__nexloriThemeObserver) {{
-  const observer = new MutationObserver(() => {{
-    const config = window.__nexloriThemeConfig;
-    if (config && config.enabled && !document.getElementById(id)) ensure();
-  }});
-  if (document.documentElement) observer.observe(document.documentElement, {{childList:true, subtree:true}});
-  window.__nexloriThemeObserver = observer;
-}}
-}})();"""
+        return build_page_theme_script(self.theme, enabled)
+
+    def _refresh_page_theme_script(self) -> None:
+        """Apply the selected stylesheet automatically to each newly created page document."""
+        scripts = self.profile.scripts()
+        if self._page_theme_script is not None:
+            try:
+                scripts.remove(self._page_theme_script)
+            except (RuntimeError, TypeError):
+                pass
+        script = QWebEngineScript()
+        script.setName("NexloriWebsiteTheme")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        # Pages often render their actual content in an iframe; theme those documents too.
+        script.setRunsOnSubFrames(True)
+        script.setSourceCode(self._build_page_theme_script(self.settings.adapt_page_theme))
+        scripts.insert(script)
+        self._page_theme_script = script
 
     def apply_page_theme(self, view: QWebEngineView) -> None:
-        # An injected user stylesheet changes colours; Qt WebEngine continues to run the original website.
+        # The current page gets updated immediately; profile-level DocumentReady injection
+        # applies the same stylesheet on future navigations as well.
         view.page().runJavaScript(self._build_page_theme_script(self.settings.adapt_page_theme))
 
     def toggle_page_theme(self, enabled: bool) -> None:
         self.settings.adapt_page_theme = bool(enabled)
+        self._refresh_page_theme_script()
         self._save_settings()
         self.page_theme_button.setToolTip(
             "Webseiten-Theme ist an" if enabled else "Webseiten-Theme ist aus"
@@ -738,13 +1007,316 @@ if (!window.__nexloriThemeObserver) {{
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
+    def _ensure_default_extension(self) -> None:
+        """Install the bundled official uBlock Origin Lite package for a fresh profile."""
+        if self.extension_manager is None:
+            self.statusBar().showMessage(
+                "Add-ons benötigen Qt WebEngine 6.10 oder neuer.", 6000
+            )
+            return
+        try:
+            extensions = list(self.extension_manager.extensions())
+        except (AttributeError, RuntimeError):
+            extensions = []
+        installed = any(
+            extension_key_from_info(ext) == "ublock-origin-lite"
+            and bool(ext.isInstalled())
+            for ext in extensions
+        )
+        if installed:
+            self._sync_extension_states()
+            return
+        package = bundled_ubolite_path()
+        if package is None:
+            self.statusBar().showMessage(
+                "uBlock Origin Lite fehlt in diesem Build. Du kannst ein MV3-Add-on manuell installieren.",
+                7000,
+            )
+            return
+        try:
+            self.statusBar().showMessage("uBlock Origin Lite wird zum ersten Mal eingerichtet …", 6000)
+            self.extension_manager.installExtension(str(package))
+        except Exception as exc:  # noqa: BLE001
+            self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
+
+    def _on_extension_installed(self, extension) -> None:
+        """Persist the requested state, then enable it after Qt leaves its install callback."""
+        try:
+            if not extension.isInstalled() or not extension.isLoaded():
+                reason = str(extension.error() or "Erweiterung wurde nicht korrekt geladen.")
+                self.statusBar().showMessage(f"Add-on-Installation fehlgeschlagen: {reason}", 8000)
+                return
+            name = extension_name_from_info(extension)
+            key = extension_key_from_name(name)
+            enabled = bool(self.settings.ubol_enabled) if key == "ublock-origin-lite" else True
+            self.settings.extensions_enabled[key] = enabled
+            if key == "ublock-origin-lite":
+                self.settings.ubol_enabled = enabled
+            self._save_settings()
+            QTimer.singleShot(
+                0,
+                lambda ext=extension, state=enabled, label=name: self._activate_installed_extension(
+                    ext, state, label
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.statusBar().showMessage(f"Add-on konnte nicht vorbereitet werden: {exc}", 8000)
+
+    def _activate_installed_extension(self, extension, enabled: bool, name: str) -> None:
+        """Activate outside installFinished to avoid mutating Qt's manager during its callback."""
+        try:
+            if self.extension_manager is None or not extension.isLoaded():
+                self.statusBar().showMessage(f"{name} ist geladen, aber noch nicht bereit.", 6000)
+                return
+            self.extension_manager.setExtensionEnabled(extension, bool(enabled))
+            self.statusBar().showMessage(
+                f"{name} wurde installiert und {'aktiviert' if enabled else 'deaktiviert'}.", 5000
+            )
+            QTimer.singleShot(200, self._sync_extension_states)
+        except Exception as exc:  # noqa: BLE001
+            self.statusBar().showMessage(f"{name} konnte nicht aktiviert werden: {exc}", 8000)
+
+    def _sync_extension_states(self) -> None:
+        """Restore each add-on's persisted enabled state; Qt loads installed extensions disabled."""
+        if self.extension_manager is None:
+            return
+        try:
+            for extension in self.extension_manager.extensions():
+                if not extension.isLoaded():
+                    continue
+                extension_name = extension_name_from_info(extension)
+                key = extension_key_from_name(extension_name)
+                if not key or is_builtin_extension(extension_name):
+                    continue
+                if key == "ublock-origin-lite":
+                    enabled = bool(self.settings.ubol_enabled)
+                else:
+                    enabled = bool(self.settings.extensions_enabled.get(key, False))
+                if bool(extension.isEnabled()) != enabled:
+                    self.extension_manager.setExtensionEnabled(extension, enabled)
+        except (AttributeError, RuntimeError):
+            return
+
+    def set_extension_enabled(self, extension, enabled: bool) -> None:
+        if self.extension_manager is None:
+            raise RuntimeError("Qt WebEngine unterstützt in diesem Build keine Erweiterungen.")
+        name = extension_name_from_info(extension)
+        key = extension_key_from_name(name)
+        self.extension_manager.setExtensionEnabled(extension, bool(enabled))
+        self.settings.extensions_enabled[key] = bool(enabled)
+        if key == "ublock-origin-lite":
+            self.settings.ubol_enabled = bool(enabled)
+        self._save_settings()
+        self.statusBar().showMessage(f"{name}: {'aktiviert' if enabled else 'deaktiviert'}", 3000)
+
+    def show_extensions_manager(self) -> None:
+        if self.extension_manager is None:
+            QMessageBox.warning(
+                self, "Add-ons nicht verfügbar",
+                "Browser-Erweiterungen erfordern Qt WebEngine 6.10 oder neuer.",
+            )
+            return
+        try:
+            from .extensions_ui import ExtensionsDialog
+            ExtensionsDialog(self, self).exec()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Add-ons", f"Der Add-on-Manager konnte nicht geöffnet werden: {exc}")
+
+    def show_settings(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nexlori · Einstellungen")
+        dialog.setMinimumWidth(560)
+        root = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Hier verwaltest du Datenschutz, Website-Darstellung, Updates und das Verhalten von Nexlori.",
+            dialog,
+        )
+        intro.setWordWrap(True)
+        root.addWidget(intro)
+
+        form = QFormLayout()
+        theme_css = QCheckBox("Webseiten an das aktive Nexlori-Theme anpassen", dialog)
+        theme_css.setChecked(self.settings.adapt_page_theme)
+        ubol = QCheckBox("uBlock Origin Lite aktivieren (Werbung und Tracker blockieren)", dialog)
+        ubol.setChecked(self.settings.ubol_enabled)
+        updates = QCheckBox("Beim Start automatisch nach Updates suchen", dialog)
+        updates.setChecked(self.settings.auto_update_check)
+        popups = QCheckBox("Website-Pop-ups und neue Fenster erlauben", dialog)
+        popups.setChecked(self.settings.allow_web_popups)
+
+        zoom = QDoubleSpinBox(dialog)
+        zoom.setRange(0.5, 3.0)
+        zoom.setSingleStep(0.1)
+        zoom.setSuffix("×")
+        zoom.setValue(float(self.settings.page_zoom))
+
+        search_engine = QComboBox(dialog)
+        providers = {
+            "DuckDuckGo": "https://html.duckduckgo.com/html/?q={}",
+            "Google": "https://www.google.com/search?q={}",
+            "Bing": "https://www.bing.com/search?q={}",
+            "Ecosia": "https://www.ecosia.org/search?q={}",
+        }
+        for label, template in providers.items():
+            search_engine.addItem(label, template)
+        selected = search_engine.findData(self.settings.search_url)
+        if selected < 0:
+            selected = next(
+                (
+                    i for i in range(search_engine.count())
+                    if self.settings.search_url.startswith(str(search_engine.itemData(i)).split("{")[0])
+                ),
+                0,
+            )
+        search_engine.setCurrentIndex(max(0, selected))
+
+        form.addRow("Website-Farben", theme_css)
+        form.addRow("Werbe- und Trackerschutz", ubol)
+        form.addRow("Updates", updates)
+        form.addRow("Pop-ups", popups)
+        form.addRow("Standard-Zoom", zoom)
+        form.addRow("Suchmaschine", search_engine)
+        root.addLayout(form)
+
+        actions = QHBoxLayout()
+        addons = QPushButton("Add-ons verwalten …", dialog)
+        addons.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.show_extensions_manager)))
+        toolbar = QPushButton("Browserleiste anpassen …", dialog)
+        toolbar.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.customize_toolbar)))
+        actions.addWidget(addons)
+        actions.addWidget(toolbar)
+        root.addLayout(actions)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        root.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.settings.adapt_page_theme = theme_css.isChecked()
+        self.settings.ubol_enabled = ubol.isChecked()
+        self.settings.auto_update_check = updates.isChecked()
+        self.settings.allow_web_popups = popups.isChecked()
+        self.settings.page_zoom = float(zoom.value())
+        self.settings.search_url = str(search_engine.currentData())
+        self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
+        self._refresh_page_theme_script()
+        self._sync_extension_states()
+        self._save_settings()
+        for index in range(self.tabs.count()):
+            view = self.tabs.widget(index)
+            if isinstance(view, QWebEngineView):
+                view.setZoomFactor(self.settings.page_zoom)
+                self.apply_page_theme(view)
+        self.statusBar().showMessage("Einstellungen gespeichert.", 3000)
+
+    def show_spotify_popup(self) -> None:
+        try:
+            from .spotify_popup import SpotifyPopup
+            if self._spotify_popup is None:
+                self._spotify_popup = SpotifyPopup(self.profile, self)
+                self._spotify_popup.destroyed.connect(lambda: setattr(self, "_spotify_popup", None))
+            self._spotify_popup.show()
+            self._spotify_popup.raise_()
+            self._spotify_popup.activateWindow()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Spotify Mini-Player", f"Der Mini-Player konnte nicht geöffnet werden: {exc}")
+
+    def show_password_manager(self) -> None:
+        try:
+            from .password_vault_ui import open_password_manager
+            view = self.current_view()
+            site = ""
+            if view:
+                current = view.url()
+                if current.scheme() in {"http", "https"} and current.host():
+                    site = f"{current.scheme()}://{current.host()}"
+            open_password_manager(self, self.settings_path.parent / "password-vault.json", default_site=site)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Passwortmanager", f"Der Passwortmanager konnte nicht geöffnet werden: {exc}")
+
+    def _start_silent_update_check(self) -> None:
+        self._silent_update_check = True
+        self._start_update_worker("check")
+
+    def check_for_updates(self) -> None:
+        self._silent_update_check = False
+        self._start_update_worker("check")
+
+    def _start_update_worker(self, task: str, release: dict | None = None) -> None:
+        if self._update_worker is not None and self._update_worker.isRunning():
+            self.statusBar().showMessage("Ein Update-Vorgang läuft bereits.", 3000)
+            return
+        update_dir = self.settings_path.parent / "updates"
+        worker = UpdateWorker(task, release=release, update_dir=update_dir, parent=self)
+        worker.finished.connect(self._on_update_worker_finished)
+        self._update_worker = worker
+        self.statusBar().showMessage("Suche nach Nexlori-Updates …" if task == "check" else "Update wird heruntergeladen und geprüft …")
+        worker.start()
+
+    def _on_update_worker_finished(self) -> None:
+        worker = self._update_worker
+        if worker is None:
+            return
+        data = dict(worker.result_data)
+        self._update_worker = None
+        worker.deleteLater()
+        if data.get("error"):
+            message = str(data["error"])
+            self.statusBar().showMessage("Update-Vorgang fehlgeschlagen.", 5000)
+            if not self._silent_update_check:
+                QMessageBox.warning(self, "Nexlori-Update", message)
+            return
+        if data.get("task") == "check":
+            release = data.get("release")
+            if not release:
+                self.statusBar().showMessage("Nexlori ist auf dem neuesten veröffentlichten Stand.", 4000)
+                if not self._silent_update_check:
+                    QMessageBox.information(self, "Nexlori-Update", f"Du verwendest Nexlori {APP_VERSION}. Es wurde kein neueres veröffentlichtes Release gefunden.")
+                return
+            notes = str(release.get("body") or "Keine Release-Notizen vorhanden.")
+            details = (
+                f"Version {release['version']} ist verfügbar. Du verwendest Nexlori {APP_VERSION}.\n\n"
+                + notes[:1200]
+                + "\n\nMöchtest du das Update herunterladen und die EXE aktualisieren?"
+            )
+            answer = QMessageBox.question(
+                self, "Nexlori-Update verfügbar", details,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self._start_update_worker("download", release)
+            else:
+                self.statusBar().showMessage(f"Nexlori {release['version']} ist verfügbar.", 5000)
+            return
+        if data.get("task") == "download":
+            release = data.get("release") or {}
+            try:
+                from .updater import start_windows_self_update
+                started = start_windows_self_update(str(data["path"]), str(release.get("url") or "https://github.com/paulhubacek1-afk/NEXLORI/releases"))
+            except Exception as exc:  # noqa: BLE001
+                QMessageBox.warning(self, "Nexlori-Update", f"Der Download wurde geprüft, aber der Updater konnte nicht gestartet werden: {exc}")
+                return
+            if not started:
+                QDesktopServices.openUrl(QUrl(str(release.get("url") or "https://github.com/paulhubacek1-afk/NEXLORI/releases")))
+                QMessageBox.information(self, "Nexlori-Update", "Das Update wurde heruntergeladen und die Prüfsumme stimmt. Starte die Release-Seite, damit du die Windows-Version manuell installieren kannst.")
+                return
+            QMessageBox.information(self, "Nexlori-Update", "Update verifiziert. Nexlori wird geschlossen, aktualisiert und anschließend neu gestartet.")
+            self.close()
+            QApplication.quit()
+
     def show_about(self) -> None:
         QMessageBox.about(
             self,
             "Über Nexlori",
-            "<h3>Nexlori</h3><p>Dein Web. Dein Look.</p>"
-            "<p>Chromium-WebEngine für moderne Websites, mit lokalen Themes und ohne Nexlori-Telemetrie.</p>"
-            "<p>Die Darstellung einer Website kann durch das optionale Theme-CSS verändert werden.</p>",
+            f"<h3>Nexlori {APP_VERSION}</h3><p>Dein Web. Dein Look.</p>"
+            "<p>Chromium-WebEngine für moderne Websites, mit lokalen Themes, Spotify Mini-Player und einem verschlüsselten Passwortmanager.</p>"
+            "<p>Updates werden von GitHub Releases bezogen und vor dem Ersetzen der EXE per SHA-256 geprüft.</p>",
         )
 
     def _save_settings(self) -> None:
@@ -757,6 +1329,39 @@ if (!window.__nexloriThemeObserver) {{
         self._save_settings()
         self._save_bookmarks()
         super().closeEvent(event)
+
+
+def _selftest_ubol_package() -> tuple[bool, str]:
+    """Verify the bundled uBlock Origin Lite archive without starting extension subprocesses.
+
+    Qt WebEngine's extension runtime has native Chromium subprocesses; the EXE packaging
+    smoke test must not install/enable extensions and then tear their profile down in the
+    same short-lived test process. The package itself is hash-checked at build time and
+    its manifest/identity are checked again here.
+    """
+    import hashlib
+
+    from .extension_utils import UBOLITE_SHA256, bundled_ubolite_path, inspect_extension_package
+
+    package = bundled_ubolite_path()
+    if package is None:
+        return False, "Das geprüfte uBlock-Origin-Lite-Paket fehlt."
+    digest = hashlib.sha256()
+    try:
+        with package.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual = digest.hexdigest()
+        if actual.lower() != UBOLITE_SHA256.lower():
+            return False, "SHA-256-Prüfsumme des eingebauten uBlock-Origin-Lite-Pakets stimmt nicht."
+        details = inspect_extension_package(package)
+        name = str(details.get("name") or "")
+        if details.get("manifest_version") != 3 or "ublock" not in name.casefold():
+            return False, "Das Paket ist keine gültige Manifest-V3-Version von uBlock Origin Lite."
+        return True, f"{name} {details.get('version', '')} · Manifest V3 und SHA-256 geprüft"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+
 
 
 def _selftest_webengine() -> tuple[bool, str]:
@@ -810,6 +1415,7 @@ def run(argv: list[str] | None = None) -> int:
     app = QApplication.instance() or QApplication([APP_NAME])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName("Nexlori")
+    app.setWindowIcon(_qt_app_icon())
     app.setStyle("Fusion")
     start_url = None
     if argv:

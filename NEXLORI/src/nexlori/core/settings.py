@@ -32,6 +32,16 @@ class Settings:
     search_url: str = "https://html.duckduckgo.com/html/?q={}"  # {} wird durch die Suchanfrage ersetzt
     page_zoom: float = 1.0  # zusätzlich zur Bildschirmskalierung
     adapt_page_theme: bool = True  # injiziert eine optionale, lokale Nutzer-Stylesheet in Websites
+    pride_favorites: list[str] = field(default_factory=lambda: ["pride-gay", "pride-trans", "pride-regenbogen"])
+    toolbar_search_width: int = 560
+    toolbar_icon_size: int = 18
+    toolbar_visible_icons: list[str] = field(
+        default_factory=lambda: ["home", "bookmark", "spotify", "page_theme", "theme"]
+    )
+    auto_update_check: bool = True
+    ubol_enabled: bool = True
+    allow_web_popups: bool = False
+    extensions_enabled: dict[str, bool] = field(default_factory=lambda: {"ublock-origin-lite": True})
 
     def problems(self) -> list[str]:
         out = []
@@ -53,6 +63,29 @@ class Settings:
             out.append("page_zoom: zwischen 0.5 und 3.0 erwartet")
         if not isinstance(self.adapt_page_theme, bool):
             out.append("adapt_page_theme: true oder false erwartet")
+        if not isinstance(self.pride_favorites, list) or len(self.pride_favorites) > 3:
+            out.append("pride_favorites: höchstens drei Theme-Namen erwartet")
+        elif any(not isinstance(name, str) or not name.startswith("pride-") or name not in BUILTIN_THEMES for name in self.pride_favorites):
+            out.append("pride_favorites: nur vorhandene Pride-Themes sind erlaubt")
+        if not isinstance(self.toolbar_search_width, int) or not 360 <= self.toolbar_search_width <= 1000:
+            out.append("toolbar_search_width: zwischen 360 und 1000 erwartet")
+        if not isinstance(self.toolbar_icon_size, int) or not 14 <= self.toolbar_icon_size <= 30:
+            out.append("toolbar_icon_size: zwischen 14 und 30 erwartet")
+        valid_icons = {"home", "bookmark", "spotify", "page_theme", "theme"}
+        if (
+            not isinstance(self.toolbar_visible_icons, list)
+            or len(set(self.toolbar_visible_icons)) != len(self.toolbar_visible_icons)
+            or any(icon not in valid_icons for icon in self.toolbar_visible_icons)
+        ):
+            out.append("toolbar_visible_icons: ungültige oder doppelte Icons")
+        for field_name in ("auto_update_check", "ubol_enabled", "allow_web_popups"):
+            if not isinstance(getattr(self, field_name), bool):
+                out.append(f"{field_name}: true oder false erwartet")
+        if (
+            not isinstance(self.extensions_enabled, dict)
+            or any(not isinstance(key, str) or not isinstance(value, bool) for key, value in self.extensions_enabled.items())
+        ):
+            out.append("extensions_enabled: erwartet wird ein Wörterbuch aus Add-on-Namen und booleschem Status")
         return out
 
     @classmethod
