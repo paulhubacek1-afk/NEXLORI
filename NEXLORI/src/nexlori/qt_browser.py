@@ -1329,7 +1329,7 @@ QLabel {{ background:transparent; }}
 
 
 def _selftest_ubol_extension() -> tuple[bool, str]:
-    """Verify that the bundled uBlock Origin Lite can be installed and enabled in a persistent test profile."""
+    """Verify that the bundled uBlock Origin Lite installs and can be enabled."""
     import tempfile
 
     app = QApplication.instance() or QApplication(["Nexlori-uBOL-selftest"])
@@ -1348,20 +1348,13 @@ def _selftest_ubol_extension() -> tuple[bool, str]:
         outcome: dict[str, object] = {}
 
         def install_finished(extension) -> None:
-            name = str(extension.name() or "")
             if extension_key_from_info(extension) != "ublock-origin-lite":
                 return
             if not extension.isInstalled() or not extension.isLoaded():
                 outcome["error"] = str(extension.error() or "uBlock Origin Lite wurde nicht korrekt geladen.")
-                loop.quit()
-                return
-            try:
-                manager.setExtensionEnabled(extension, True)
+            else:
+                outcome["extension"] = extension
                 outcome["name"] = extension_name_from_info(extension)
-                outcome["enabled"] = bool(extension.isEnabled())
-                outcome["error"] = str(extension.error() or "")
-            except Exception as exc:  # noqa: BLE001
-                outcome["error"] = f"{type(exc).__name__}: {exc}"
             loop.quit()
 
         manager.installFinished.connect(install_finished)
@@ -1372,13 +1365,27 @@ def _selftest_ubol_extension() -> tuple[bool, str]:
             manager.installFinished.disconnect(install_finished)
         except (RuntimeError, TypeError):
             pass
-        if not outcome.get("name"):
+
+        extension = outcome.get("extension")
+        if extension is None:
             return False, str(outcome.get("error") or "Installation von uBlock Origin Lite hat das Zeitlimit überschritten.")
-        if not outcome.get("enabled"):
-            return False, f"{outcome.get('name')} wurde installiert, ließ sich aber nicht aktivieren."
-        if outcome.get("error"):
-            return False, str(outcome["error"])
-        return True, f"{outcome['name']} installiert und aktiviert"
+
+        # Run the state change after installFinished has returned to Qt's event loop.
+        try:
+            manager.setExtensionEnabled(extension, True)
+        except Exception as exc:  # noqa: BLE001
+            return False, f"uBlock Origin Lite ließ sich nicht aktivieren: {type(exc).__name__}: {exc}"
+        QTimer.singleShot(250, loop.quit)
+        loop.exec()
+        if not bool(extension.isEnabled()):
+            current = next(
+                (item for item in manager.extensions()
+                 if extension_key_from_info(item) == "ublock-origin-lite"),
+                None,
+            )
+            if current is None or not current.isEnabled():
+                return False, "uBlock Origin Lite wurde installiert, bleibt aber deaktiviert."
+        return True, f"{outcome.get('name', 'uBlock Origin Lite')} installiert und aktiviert"
     except Exception as exc:  # noqa: BLE001
         return False, f"{type(exc).__name__}: {exc}"
     finally:
