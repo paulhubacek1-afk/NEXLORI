@@ -53,7 +53,16 @@ def main() -> int:
             manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
             if manifest.get("manifest_version") != 3:
                 raise RuntimeError("Die heruntergeladene uBOL-Erweiterung ist nicht Manifest V3.")
-            if "uBlock" not in str(manifest.get("name", "")) and "uBOL" not in str(manifest.get("name", "")):
+            manifest_name = str(manifest.get("name", ""))
+            localized = manifest_name
+            if manifest_name.startswith("__MSG_") and manifest_name.endswith("__"):
+                key = manifest_name[6:-2]
+                locale = str(manifest.get("default_locale") or "en")
+                messages_path = f"_locales/{locale}/messages.json"
+                if messages_path in names:
+                    messages = json.loads(archive.read(messages_path).decode("utf-8"))
+                    localized = str(messages.get(key, {}).get("message", manifest_name))
+            if "ublock" not in localized.casefold() and "ubol" not in localized.casefold():
                 raise RuntimeError("Die Add-on-Metadaten stimmen nicht mit uBlock Origin Lite überein.")
         license_temp = temporary_path / "LICENSE"
         license_text = download(LICENSE_URL, license_temp, 200 * 1024)
