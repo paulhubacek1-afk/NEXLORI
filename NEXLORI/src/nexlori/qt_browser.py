@@ -342,7 +342,9 @@ class NexloriWindow(QMainWindow):
         self.theme_menu.setTitle("Theme")
         self.theme_actions: dict[str, QAction] = {}
         self.theme_action_group = QActionGroup(self)
-        self.theme_action_group.setExclusive(True)
+        # A theme can occur in the three-favourites submenu and in the full list.
+        # Let set_theme synchronise every copy rather than letting Qt uncheck duplicates.
+        self.theme_action_group.setExclusive(False)
         self._theme_action_copies: dict[str, list[QAction]] = {}
 
         favourites = self.theme_menu.addMenu("Deine 3 Pride-Favoriten")
