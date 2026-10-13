@@ -113,38 +113,44 @@ jobs:
             throw "Die EXE hat keine Selbsttest-Datei geschrieben."
           }
 
-      - name: Echtes Browserfenster starten und prüfen
+      - name: Browser-GUI initialisieren und prüfen
         shell: pwsh
         run: |
           $exe = Join-Path $PWD "dist\Nexlori.exe"
+          $marker = Join-Path $PWD "gui-smoke-test.marker.txt"
           $stdout = Join-Path $PWD "gui-smoke-test.stdout.txt"
           $stderr = Join-Path $PWD "gui-smoke-test.stderr.txt"
+          Remove-Item $marker, $stdout, $stderr -Force -ErrorAction SilentlyContinue
+          $env:NEXLORI_SMOKE_MARKER = $marker
           $process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           $deadline = (Get-Date).AddSeconds(35)
-          $windowFound = $false
-          while ((Get-Date) -lt $deadline) {
+          while ((Get-Date) -lt $deadline -and -not (Test-Path $marker)) {
             Start-Sleep -Milliseconds 500
             $process.Refresh()
             if ($process.HasExited) {
               $details = @()
               if (Test-Path $stdout) { $details += Get-Content $stdout -Raw }
               if (Test-Path $stderr) { $details += Get-Content $stderr -Raw }
-              throw "Nexlori wurde beendet, bevor das Browserfenster erschien. Exit-Code: $($process.ExitCode). $($details -join [Environment]::NewLine)"
-            }
-            if ($process.MainWindowHandle -ne 0) {
-              $windowFound = $true
-              break
+              throw "Nexlori wurde vor dem Anzeigen des Browserfensters beendet. Exit-Code: $($process.ExitCode). $($details -join [Environment]::NewLine)"
             }
           }
-          if (-not $windowFound) {
+          Remove-Item Env:NEXLORI_SMOKE_MARKER -ErrorAction SilentlyContinue
+          if (-not (Test-Path $marker)) {
             & taskkill.exe /PID $process.Id /T /F | Out-Null
-            throw "Nexlori hat innerhalb von 35 Sekunden kein Browserfenster geöffnet."
+            throw "Nexlori hat das GUI-Initialisieren nicht innerhalb von 35 Sekunden bestätigt."
           }
-          Write-Host "GUI-Start erfolgreich: Fensterhandle $($process.MainWindowHandle)"
-          $process.CloseMainWindow() | Out-Null
-          if (-not $process.WaitForExit(10000)) {
+          $details = Get-Content $marker -Raw
+          Write-Host "GUI-Initialisierung erfolgreich: $details"
+          if ($details -notmatch "shown=True" -or $details -notmatch "size=\d+x\d+") {
             & taskkill.exe /PID $process.Id /T /F | Out-Null
+            throw "Nexlori hat kein sichtbares, korrekt dimensioniertes Browserfenster erstellt: $details"
           }
+          Start-Sleep -Seconds 5
+          $process.Refresh()
+          if ($process.HasExited) {
+            throw "Nexlori hat sich kurz nach dem GUI-Start beendet (Exit-Code $($process.ExitCode))."
+          }
+          & taskkill.exe /PID $process.Id /T /F | Out-Null
 
       - name: SHA-256-Prüfsumme erzeugen
         shell: pwsh
