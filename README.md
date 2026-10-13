@@ -1,20 +1,28 @@
 # NEXLORI
 
-Nexlori ist ein Browser-Prototyp mit Chromium-WebEngine, Tabs, Lesezeichen, Downloads und anpassbaren Themes. Der frühere eigene HTML/CSS-Renderer bleibt für Lern- und Render-Tests erhalten.
+Nexlori ist ein anpassbarer Windows-Browser auf Basis von Qt WebEngine/Chromium, mit einer eigenen, abgerundeten Suchleiste, wechselbaren Themes, einem Spotify-Mini-Player und einem lokal verschlüsselten Passwort-Tresor.
 
-**Der eigentliche Python-Prototyp liegt im Ordner [NEXLORI/](NEXLORI/).** Die ausführliche Dokumentation, Kompatibilitätsübersicht und Entwicklungsanleitung befinden sich in [NEXLORI/README.md](NEXLORI/README.md).
+## Windows-Download
 
-## Windows-EXE herunterladen
+- **Empfohlen:** Installiere `Nexlori-Setup.exe`. Der Installer erstellt ein Desktop-Symbol mit Nexlori-Icon und eine Startmenü-Verknüpfung.
+- **Portable:** `Nexlori.exe` ohne Installation starten.
+- **Prüfung:** `Nexlori.exe.sha256` enthält die SHA-256-Prüfsumme der portablen Version.
 
-1. Öffne [GitHub Actions](https://github.com/paulhubacek1-afk/NEXLORI/actions/workflows/build-windows.yml).
-2. Öffne den erfolgreich abgeschlossenen Lauf **Windows-EXE**.
-3. Lade unter **Artifacts** die Datei **Nexlori-Windows-x64** herunter.
-4. Entpacke die ZIP-Datei und starte die Datei Nexlori.exe. Die Datei Nexlori.exe.sha256 enthält die Prüfsumme.
+**Aktuelle veröffentlichte Versionen:** [GitHub Releases](https://github.com/paulhubacek1-afk/NEXLORI/releases)
 
-Der Build läuft bei Änderungen am Hauptprojekt, vor dem Zusammenführen eines Pull Requests und kann unter **Actions → Windows-EXE → Run workflow** manuell gestartet werden. Bei Versions-Tags wie v0.2.0 erstellt der Workflow zusätzlich ein GitHub-Release.
+## Enthaltene Funktionen
 
-## Wichtiger Hinweis
+- Chromium-WebEngine für JavaScript, moderne CSS-Layouts, Bilder, Formulare und die meisten modernen Websites.
+- Anpassbare Suchleiste und Icons, austauschbare Themes und drei Pride-Favoriten.
+- Viele Pride-Flaggen sowie Gothic, Cyberpunk, Wald, Ozean, Sakura, Mitternacht und Kaffee.
+- Spotify-Web-Mini-Player, Lesezeichen, Verlauf, Downloads, Zoom und Seitensuche.
+- Passwortmanager mit Master-Passphrase und verschlüsselter lokaler Ablage.
+- Update-Check mit HTTPS-Download, SHA-256-Prüfung und Windows-Selbstupdate.
 
-Nexlori nutzt nun Chromium-WebEngine, daher funktionieren die meisten modernen Websites mit JavaScript, CSS, Bildern und Formularen. Einzelne Dienste können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren. Die Version bleibt ein Entwicklungsstand; verwende sie nicht für Online-Banking oder andere sensible Seiten.
+Nicht jede Website wird garantiert unterstützt. Einzelne Dienste benötigen DRM- oder Plattformfunktionen, die eingebettete Browser blockieren können. Der Passwortmanager speichert lokal verschlüsselt, aber automatisches Einfügen von Zugangsdaten ist noch nicht aktiviert.
 
-Siehe [Funktionsstand und Einschränkungen](NEXLORI/README.md) für Details.
+## Feedback
+
+Anliegen, Fehler und Verbesserungen bitte über [GitHub Issues](https://github.com/paulhubacek1-afk/NEXLORI/issues/new) oder per E-Mail an [nexlori-browser@gmx.at](mailto:nexlori-browser@gmx.at) melden.
+
+Weitere technische Details und die Entwicklungsanleitung stehen in [NEXLORI/README.md](NEXLORI/README.md).
