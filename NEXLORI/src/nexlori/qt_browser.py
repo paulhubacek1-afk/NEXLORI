@@ -1037,9 +1037,10 @@ QLabel {{ background:transparent; }}
             self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
 
     def _on_extension_installed(self, extension) -> None:
+        """Persist the requested state, then enable it after Qt leaves its install callback."""
         try:
-            if not extension.isInstalled():
-                reason = str(extension.error() or "Unbekannter Installationsfehler")
+            if not extension.isInstalled() or not extension.isLoaded():
+                reason = str(extension.error() or "Erweiterung wurde nicht korrekt geladen.")
                 self.statusBar().showMessage(f"Add-on-Installation fehlgeschlagen: {reason}", 8000)
                 return
             name = extension_name_from_info(extension)
@@ -1048,14 +1049,29 @@ QLabel {{ background:transparent; }}
             self.settings.extensions_enabled[key] = enabled
             if key == "ublock-origin-lite":
                 self.settings.ubol_enabled = enabled
-            self.extension_manager.setExtensionEnabled(extension, enabled)
             self._save_settings()
+            QTimer.singleShot(
+                0,
+                lambda ext=extension, state=enabled, label=name: self._activate_installed_extension(
+                    ext, state, label
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.statusBar().showMessage(f"Add-on konnte nicht vorbereitet werden: {exc}", 8000)
+
+    def _activate_installed_extension(self, extension, enabled: bool, name: str) -> None:
+        """Activate outside installFinished to avoid mutating Qt's manager during its callback."""
+        try:
+            if self.extension_manager is None or not extension.isLoaded():
+                self.statusBar().showMessage(f"{name} ist geladen, aber noch nicht bereit.", 6000)
+                return
+            self.extension_manager.setExtensionEnabled(extension, bool(enabled))
             self.statusBar().showMessage(
                 f"{name} wurde installiert und {'aktiviert' if enabled else 'deaktiviert'}.", 5000
             )
             QTimer.singleShot(200, self._sync_extension_states)
         except Exception as exc:  # noqa: BLE001
-            self.statusBar().showMessage(f"Add-on konnte nicht aktiviert werden: {exc}", 8000)
+            self.statusBar().showMessage(f"{name} konnte nicht aktiviert werden: {exc}", 8000)
 
     def _sync_extension_states(self) -> None:
         """Restore each add-on's persisted enabled state; Qt loads installed extensions disabled."""
