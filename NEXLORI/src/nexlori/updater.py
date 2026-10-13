@@ -17,7 +17,7 @@ from typing import Any
 REPOSITORY = "paulhubacek1-afk/NEXLORI"
 RELEASES_API = f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=30"
 MAX_EXE_BYTES = 400 * 1024 * 1024
-VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$")
+VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+]build[.-](\d+))?$", re.IGNORECASE)
 HASH_PATTERN = re.compile(r"^\s*([0-9a-fA-F]{64})\s+Nexlori\.exe\s*$", re.MULTILINE)
 
 
@@ -25,11 +25,13 @@ class UpdateError(RuntimeError):
     """An update could not be checked, downloaded, or verified."""
 
 
-def version_tuple(value: str) -> tuple[int, int, int]:
+def version_tuple(value: str) -> tuple[int, int, int, int]:
+    """Compare stable versions and monotonically increasing CI builds of the same version."""
     match = VERSION_PATTERN.fullmatch(value.strip())
     if not match:
         raise ValueError(f"Ungültige Versionsnummer: {value!r}")
-    return tuple(int(part) for part in match.groups())
+    major, minor, patch, build = match.groups()
+    return int(major), int(minor), int(patch), int(build or 0)
 
 
 def find_update(current_version: str, releases: list[dict[str, Any]]) -> dict[str, Any] | None:
