@@ -30,3 +30,14 @@ def test_website_theme_css_leaves_media_and_layout_intact():
     assert "Images, video, canvas" in css
     assert "display:none" not in css.replace(" ", "")
     assert "filter:" not in css
+
+def test_page_theme_is_preserved_for_every_navigation():
+    from nexlori.page_theme import build_page_theme_script
+
+    script = build_page_theme_script(BUILTIN_THEMES["gothic"], True)
+    assert "MutationObserver" in script
+    assert "nexlori-theme-user-style" in script
+    assert "enabled:true" in script
+    disabled = build_page_theme_script(BUILTIN_THEMES["gothic"], False)
+    assert "enabled:false" in disabled
+    assert "old.remove()" in disabled
