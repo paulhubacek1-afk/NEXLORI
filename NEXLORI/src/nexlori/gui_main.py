@@ -39,14 +39,14 @@ def selftest(out_path: str | None = None) -> int:
         return 3
     _write(out_path, "CHECK: renderer and Tk passed; testing Chromium WebEngine")
     try:
-        from .qt_browser import _selftest_ubol_extension, _selftest_webengine
+        from .qt_browser import _selftest_ubol_package, _selftest_webengine
 
         ok, detail = _selftest_webengine()
         if not ok:
             _write(out_path, f"FEHLER Chromium-WebEngine: {detail}")
             return 4
-        _write(out_path, "CHECK: Chromium WebEngine passed; testing the bundled uBlock Origin Lite")
-        ubol_ok, ubol_detail = _selftest_ubol_extension()
+        _write(out_path, "CHECK: Chromium WebEngine passed; validating bundled uBlock Origin Lite package")
+        ubol_ok, ubol_detail = _selftest_ubol_package()
         if not ubol_ok:
             _write(out_path, f"FEHLER uBlock Origin Lite: {ubol_detail}")
             return 5
