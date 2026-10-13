@@ -84,11 +84,61 @@ Nexlori soll ein Browser sein, in dem Menschen ihre Persönlichkeit zeigen könn
 5. **Ehrlich:** Funktionen und Web-Kompatibilität werden erst dann als fertig bezeichnet, wenn sie implementiert und getestet wurden.
 6. **Sicher:** Sicherheitsgrenzen, Updates und Schutz vor schädlichen Webseiten sind Voraussetzung für einen öffentlichen Browser.
 
+## Projektstand der Umsetzung
+
+Stand: **Prototyp 0.2.0** – jetzt als Windows-Programm (`Nexlori.exe`). Es ist ein **Entwicklungsstand zum
+Ausprobieren, kein Alltagsbrowser**: Nexlori zeigt HTML und einfaches CSS, führt aber **kein JavaScript** aus und
+lädt **keine Bilder**. Viele moderne Webseiten sehen deshalb anders aus oder funktionieren nicht.
+
+![Nexlori-Fenster mit Trans-Theme (Screenshot aus der Testumgebung)](docs/screenshot.png)
+
+### Nexlori.exe bekommen
+
+Die EXE wird von GitHub Actions gebaut (Workflow **„Windows-EXE“**):
+
+1. **Probebau:** *Actions* → *Windows-EXE* → *Run workflow*. Nach dem Lauf unter *Artifacts* `Nexlori-Windows-x64`
+   herunterladen (ZIP mit `Nexlori.exe` und `Nexlori.exe.sha256`).
+2. **Release:** `git tag v0.2.0 && git push origin v0.2.0` – der Workflow hängt die EXE dann automatisch an ein
+   GitHub-Release (als Vorabversion).
+
+Der Workflow führt vor dem Bauen alle Tests aus und startet danach die gebaute EXE mit `--selftest`.
+Die EXE ist **nicht signiert**: Windows SmartScreen zeigt beim ersten Start „Der Computer wurde durch Windows
+geschützt“ (→ *Weitere Informationen* → *Trotzdem ausführen*), und Virenscanner melden bei solchen Programmen
+gelegentlich Fehlalarme. Mit `Nexlori.exe.sha256` lässt sich die Datei prüfen. Einstellungen liegen in
+`%APPDATA%\Nexlori\settings.json`; falls etwas abstürzt, steht Näheres in `crash.log` im selben Ordner.
+
+### Was heute vorhanden und getestet ist
+
+| Bereich | Heute vorhanden | Noch offen |
+|---|---|---|
+| Fenster-App | Tabs, Adressleiste (Adresse, lokale Datei oder Suche), Verlauf, anklickbare Links (Strg+Klick = neuer Tab), Zoom, Themes inkl. Pride, Modi, Menü | Lesezeichen, Suche in der Seite, Downloads, Drucken, Einstellungsdialog |
+| Eigener Rendering-Kern | HTML-Parser, CSS-Teilmenge, Block-/Inline-Layout ([Kompatibilität](docs/COMPATIBILITY.md)) | JavaScript, Bilder, Formulare, Tabellenlayout, Flex/Grid |
+| Netzwerk | `http`/`https` mit TLS-Prüfung (Zertifikatsspeicher des Betriebssystems, nie umgangen), gzip, Größen- und Zeitlimits, **keine Cookies** | Sandbox, Logins/Cookies, Cache, externe Stylesheets und Bilder |
+| Ressourcenschonung | Modi (Normal, Ressourcenschonend, Akku, Gaming); inaktive Tabs geben ihren Speicher frei und laden beim Zurückwechseln neu | echte RAM-/CPU-Messung pro Tab |
+| Datensparmodus | Filterlogik (Tracker, Autoplay, Vorabladen, strikt) und Einsparungsbuch getestet. Die App lädt ohnehin nur das HTML-Dokument selbst – keine Skripte, Bilder oder Tracker | Einhängen des Filters, sobald Unterressourcen geladen werden |
+| Gaming-Erkennung | im Menü freiwillig einschaltbar (standardmäßig aus), rein lokal, optional automatischer Gaming-Modus | Praxistests gegen Fehlerkennungen |
+| Musik-Popup | Modell und Steuerlogik getestet; in der App noch nicht sichtbar (es gibt noch keine Medienwiedergabe) | sichtbares Popup, echte Medienquellen |
+| Themes | 4 Basis-Themes und 7 Pride-Themes mit automatischer Kontrastprüfung (WCAG AA), im Menü wählbar | eigene Themes über die Oberfläche, Tab-Design |
+| Sicherheit | – | Sandboxing/Prozess-Isolation, Updates, Parser-Fuzzing ([Architektur](docs/ARCHITECTURE.md)) |
+
+**Noch nicht für Online-Banking oder andere sensible Seiten verwenden.**
+
+### Entwickeln
+
+```bash
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -e ".[dev,gaming]"
+nexlori gui                                          # Fenster starten (optional mit Adresse)
+nexlori render examples/hello.html examples/hello.png
+pytest                                               # Fenster-Tests laufen nur mit Display (Windows oder xvfb-run)
+pip install pyinstaller && python packaging/build_exe.py   # baut dist/Nexlori(.exe)
+```
+
 ## Roadmap
 
-- [ ] Projektstruktur und technische Architektur dokumentieren
+- [x] Projektstruktur und technische Architektur dokumentieren ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md))
 - [ ] Zielplattform und erste unterstützte Webstandards festlegen
-- [ ] Eigenständigen, experimentellen Rendering-Prototyp entwickeln
+- [x] Eigenständigen, experimentellen Rendering-Prototyp entwickeln (erste Stufe: Teilmenge von HTML/CSS → Bild)
 - [ ] Netzwerkzugriff, Zertifikatsprüfung und Sicherheitskonzept entwerfen
 - [ ] Messungen für RAM-, CPU- und Datenverbrauch integrieren
 - [ ] Datenschutzfreundlichen Datensparmodus entwickeln
