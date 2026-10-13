@@ -6,7 +6,7 @@ Nexlori ist ein experimenteller Browser-Prototyp mit einer eigenen, kleinen HTML
 
 ## Windows-EXE herunterladen
 
-1. Öffne [GitHub Actions](../../actions/workflows/build-windows.yml).
+1. Öffne [GitHub Actions](https://github.com/paulhubacek1-afk/NEXLORI/actions/workflows/build-windows.yml).
 2. Öffne den erfolgreich abgeschlossenen Lauf **Windows-EXE**.
 3. Lade unter **Artifacts** die Datei **Nexlori-Windows-x64** herunter.
 4. Entpacke die ZIP-Datei und starte die Datei Nexlori.exe. Die Datei Nexlori.exe.sha256 enthält die Prüfsumme.
