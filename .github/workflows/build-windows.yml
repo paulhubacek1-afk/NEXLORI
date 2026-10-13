@@ -16,9 +16,9 @@ permissions:
 
 jobs:
   build:
-    name: Build and test Nexlori.exe
+    name: Build and test Nexlori plus Windows installer
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: NEXLORI
@@ -64,7 +64,7 @@ jobs:
             Get-Content $out
           }
           if ($process.ExitCode -ne 0) {
-            throw "Selbsttest der EXE fehlgeschlagen (Exit-Code $($process.ExitCode))"
+            throw "EXE-Selbsttest fehlgeschlagen (Exit-Code $($process.ExitCode))"
           }
           if (-not (Test-Path $out)) {
             throw "Die EXE hat keine Selbsttest-Datei geschrieben."
@@ -77,18 +77,47 @@ jobs:
           "$hash  Nexlori.exe" | Out-File -Encoding ascii "dist\Nexlori.exe.sha256"
           Get-Content "dist\Nexlori.exe.sha256"
 
-      - name: EXE als herunterladbares Artefakt speichern
+      - name: Inno Setup installieren
+        run: choco install innosetup --no-progress -y
+
+      - name: Installationsprogramm mit Desktop-Shortcut bauen
+        shell: pwsh
+        run: |
+          $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
+          $programFiles = [Environment]::GetFolderPath('ProgramFiles')
+          $compiler = Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) {
+            $compiler = Join-Path $programFiles "Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $compiler)) {
+            throw "Inno Setup Compiler wurde nicht gefunden."
+          }
+          $match = Select-String -Path "pyproject.toml" -Pattern '^version = "([^"]+)"'
+          if (-not $match) { throw "Programmversion aus pyproject.toml konnte nicht gelesen werden." }
+          $version = $match.Matches[0].Groups[1].Value
+          & $compiler "/DMyAppVersion=$version" "packaging\Nexlori.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup ist mit Code $LASTEXITCODE fehlgeschlagen." }
+          if (-not (Test-Path "dist\Nexlori-Setup.exe")) { throw "Nexlori-Setup.exe wurde nicht erstellt." }
+
+      - name: Artefaktgrößen ausgeben
+        shell: pwsh
+        run: |
+          Get-Item "dist\Nexlori.exe", "dist\Nexlori-Setup.exe", "dist\Nexlori.exe.sha256" |
+            Select-Object Name, Length
+
+      - name: Portable EXE und Installer als Download speichern
         uses: actions/upload-artifact@v4
         with:
           name: Nexlori-Windows-x64
           path: |
             NEXLORI/dist/Nexlori.exe
             NEXLORI/dist/Nexlori.exe.sha256
+            NEXLORI/dist/Nexlori-Setup.exe
           if-no-files-found: error
           retention-days: 30
 
   release:
-    name: GitHub-Release veröffentlichen
+    name: GitHub-Release erstellen oder aktualisieren
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: windows-latest
@@ -101,15 +130,15 @@ jobs:
           name: Nexlori-Windows-x64
           path: dist
 
-      - name: Release mit EXE anlegen oder aktualisieren
+      - name: Release mit EXE, Installer und Prüfsumme anlegen oder aktualisieren
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "\${{ github.ref_name }}"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 --clobber
+            gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --clobber
           } else {
-            gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 --title "Nexlori $tag" --generate-notes --prerelease
+            gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --title "Nexlori $tag" --generate-notes
           }
