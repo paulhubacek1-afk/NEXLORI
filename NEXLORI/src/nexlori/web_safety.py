@@ -7,19 +7,67 @@ import re
 from urllib.parse import urlsplit
 
 
-# URL-level protection. This is deliberately local and does not upload browsing history.
-_BLOCKED_HOSTS = (
-    "pornhub.com", "xvideos.com", "xnxx.com", "xhamster.com", "redtube.com",
-    "youporn.com", "tube8.com", "spankbang.com", "beeg.com", "brazzers.com",
-    "chaturbate.com", "stripchat.com", "livejasmin.com", "myfreecams.com",
-    "sex.com", "hentaihaven.xxx", "nhentai.net", "rule34.xxx", "e621.net",
-    "gelbooru.com", "danbooru.donmai.us",
-)
-_ADULT_TOKEN = re.compile(
-    r"(?:^|[./?&#=_+%-])(?:porn|hentai|nsfw|xxx|erotic|adult-content|adultvideo|"
-    r"camgirl|sexcam|sexvideo|rule34|booru|onlyfans)(?:$|[./?&#=_+%-])",
-    re.IGNORECASE,
-)
+import hashlib
+
+# URL rules are stored as SHA-256 fingerprints so this protective filter does not publish adult URLs.
+_BLOCKED_HOST_HASHES = {
+    "f451a0ce975dbd22a62bd8204a25038ba485ac621a6f2fe2c605d7f3025c7a29",
+    "fa5a46404fb6405a5107dd41215b6531cbf0c156c3c8d09aef8460453d5101b9",
+    "702962ec26cb6add65eebab8e8ec9c1fa937ed45be43eaa066c2d344759259b2",
+    "6eba6edf984bf767ab88553aed11872a8842cc576daee425e12fb16f6722ad06",
+    "963b94895db566976842b60d68470314cd979a305236f0acbf26b4e79f8ca9bd",
+    "ba3599f39957f1a964d65b05a918c3b0c9bd64e9bdfcb1f3b48b40322c781449",
+    "7beb528080886e3d38c46de609f0f0ad4cb7a339bd6e481b7605f75bb706a0ad",
+    "0eecab1c8a4bee409daa265178b82f9670cb3f9ff1f501514e5a4428aec082f7",
+    "9c3ac886739d8082f36c7ff4aebfa90cdac43af0cc332a16a4d05829d1a792d7",
+    "7620dd995ecc7f92f46ced87986711a7314bd1c1c8c34c836a1daddc629a4c19",
+    "574cbb327570be709950a11ca67d412785ffa64724397f1d3d2ecca24ebf2685",
+    "00a9e0b5a5eca3a4c5f308b1adb2a56e83993ba4c7d11caf083651243f1a703d",
+    "61fa57c99de24326e6672e6be55ec05b832d476ef091433169bd7127174d6082",
+    "4d13e80e6cd7863d836618a0ee08e9f4b66d28671b9ec942f2b648177e9f83e7",
+    "fd48f662f2dede2af727058570e94c9078159b7de7f437113f44d8a5094f3906",
+    "20f792540c24b15a3fae188dea9c2ce270e464578221abaafc6c8593bc23fa8a",
+    "5bb896a5b7c0630c790724acde83a23c599076776cdb2b8ded7b0fa746b173a6",
+    "3b3a641a4889558dce3b793971c66f4851970ae2485ee33045c7b0dbc0bb2cdf",
+    "dae39b22e80aa4332bca37b5cda353c50a127e4994f54bde55f1d03de1d35c80",
+    "f6ca1c7d5d00a2a3fb4ea2f7edfa0f96a6d09c11717f39facabad2d724f16fbb",
+    "bdd57f59706828282d0776ec94909fba54e63e47d147dcecb4ccee2122a1df0c",
+}
+_BLOCKED_TOKEN_HASHES = {
+    "8c5c04391361cbf4afd74c5ed8101ea4af881c4ee3b3df1d5b3716a19b1a834d",
+    "6ccffa4977d4246ed9de8ad27693e9802b50d105aae43730d06f1dc840ca6df5",
+    "c6603565c5159fbe846a53e991829d452a1546d41150c0d3c73ddbd7f476ee0d",
+    "cd2eb0837c9b4c962c22d2ff8b5441b7b45805887f051d39bf133b583baf6860",
+    "a3686065149555674b1b7a7d39e00f15d2f831a62b6a33d12f3a14b87c8d0c88",
+    "f7996b82150661bf256d610980908773f5afdf48ea4bda18cf467d6a50e5651d",
+    "a2f1be23c6705f8d24ff84fe5a0d0860b59bea93370af9880dc4abc3cd99efb4",
+    "6a1434eef95646478ac638c61e8ffdc1d3aa77addafeba7490761026fb83b956",
+    "c1ee0017af0a756518f3cb5488968eb15f424f80863bf4ea95b1fa9e0e60ef27",
+    "83d112c07531d1db394b55a98956beadf08c383c108382fe57791092a8533a00",
+    "796ee3d0b91c9715472cb5f982ee27c51fedfe5c6dd77502d1d82d423d9436b6",
+    "774cdf7090cea5ec8cffd1461fa929bd200c501cb16997ebe6fb2c669763a015",
+    "d516dbecbf6a8cb4d28185bdd60f8faf9c0ceb8e8eabfb987206795e87281310",
+}
+
+def _fingerprint(value: str) -> str:
+    return hashlib.sha256(value.casefold().encode("utf-8", errors="ignore")).hexdigest()
+
+def is_nsfw_url(url: str) -> bool:
+    """Block known adult-domain fingerprints and explicit marker tokens in URLs."""
+    try:
+        parts = urlsplit(str(url).strip())
+        host = (parts.hostname or "").casefold().rstrip(".")
+    except ValueError:
+        return False
+    if not host:
+        return False
+    labels = host.split('.')
+    for index in range(len(labels)):
+        if _fingerprint(".".join(labels[index:])) in _BLOCKED_HOST_HASHES:
+            return True
+    markers = re.split(r"[^a-z0-9-]+", host + "/" + parts.path + "?" + parts.query)
+    return any(marker and _fingerprint(marker) in _BLOCKED_TOKEN_HASHES for marker in markers)
+
 _KNOWN_LOCAL_HOSTS = {
     "fritz.box", "router.lan", "router.home", "homeassistant.local",
     "home-assistant.local", "nas.local", "synology.local", "printer.local",
