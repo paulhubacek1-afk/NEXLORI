@@ -92,11 +92,17 @@ html, body {{
   background-color: var(--nexlori-page-bg) !important;
   color: var(--nexlori-page-text) !important;
 }}
-body, main, article, section, aside, nav, header, footer {{
+/* Apply the active text and border palette broadly while preserving media and vector icons. */
+*:not(img):not(video):not(audio):not(canvas):not(svg):not(path):not(iframe):not(picture):not(source) {{
   color: var(--nexlori-page-text) !important;
+  border-color: var(--nexlori-page-accent) !important;
 }}
-h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, legend, blockquote, figcaption, summary {{
-  color: var(--nexlori-page-text) !important;
+/* Recolour common solid page surfaces without replacing background images or gradients. */
+main, article, section, aside, nav, header, footer, table, thead, tbody, tfoot, tr, td, th,
+form, fieldset, dialog, details, [role="main"], [role="navigation"], [role="banner"],
+[role="contentinfo"], [role="dialog"], [role="region"], [class*="card" i], [class*="panel" i],
+[class*="modal" i], [class*="surface" i] {{
+  background-color: var(--nexlori-page-surface) !important;
 }}
 a, a:visited, [role="link"] {{
   color: var(--nexlori-page-accent) !important;
