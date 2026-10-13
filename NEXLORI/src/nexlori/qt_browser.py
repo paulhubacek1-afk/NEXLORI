@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QProgressBar,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QTabWidget,
@@ -49,7 +50,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
-from .core.themes import BUILTIN_THEMES, Theme
+from .core.themes import BUILTIN_THEMES, Theme, combine_themes, relative_luminance
 from .extension_utils import (
     bundled_ubolite_path,
     unpack_extension_package,
@@ -93,7 +94,7 @@ def _start_page(theme: Theme) -> str:
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Nexlori · Startseite</title>
 <style>
-:root {{ color-scheme: {'light' if theme.name in {'hell','ruhig'} else 'dark'}; }}
+:root {{ color-scheme: {'light' if relative_luminance(theme.bg) >= 0.5 else 'dark'}; }}
 * {{ box-sizing:border-box }}
 body {{ margin:0; min-height:100vh; background:{theme.bg}; color:{theme.fg}; font:16px 'Segoe UI',sans-serif;
  display:grid; place-items:center; }}
@@ -203,7 +204,7 @@ class NexloriWindow(QMainWindow):
         self._update_worker: UpdateWorker | None = None
         self._silent_update_check = True
         self._spotify_popup = None
-        self.theme = BUILTIN_THEMES.get(settings.theme, BUILTIN_THEMES["dunkel"])
+        self.theme = combine_themes([settings.theme, *settings.theme_mix])
 
         self.profile = QWebEngineProfile("Nexlori", self)
         self.profile.setPersistentStoragePath(str(self.storage_dir))
@@ -249,6 +250,14 @@ class NexloriWindow(QMainWindow):
         tab_row = QHBoxLayout()
         tab_row.setContentsMargins(7, 5, 7, 0)
         tab_row.setSpacing(6)
+        # The tab-opening control stays on the left; the right side contains tabs only.
+        self.new_tab_button = QToolButton(root)
+        self.new_tab_button.setText("+")
+        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
+        self.new_tab_button.setObjectName("newTabButton")
+        self.new_tab_button.clicked.connect(lambda: self.new_tab())
+        tab_row.addWidget(self.new_tab_button)
+
         self.tabs = QTabWidget(root)
         self.tabs.setDocumentMode(True)
         self.tabs.setMovable(True)
@@ -257,13 +266,6 @@ class NexloriWindow(QMainWindow):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self._on_current_changed)
         tab_row.addWidget(self.tabs, 1)
-
-        self.new_tab_button = QToolButton(root)
-        self.new_tab_button.setText("+")
-        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
-        self.new_tab_button.setObjectName("newTabButton")
-        self.new_tab_button.clicked.connect(lambda: self.new_tab())
-        tab_row.addWidget(self.new_tab_button)
         tab_widget = QWidget(root)
         tab_widget.setLayout(tab_row)
         outer.addWidget(tab_widget)
@@ -393,6 +395,7 @@ class NexloriWindow(QMainWindow):
             for name in names:
                 self._add_theme_action(submenu, name)
         self.theme_menu.addSeparator()
+        self.theme_menu.addAction("Themes kombinieren …", self.edit_theme_mix)
         self.theme_menu.addAction("Drei Pride-Favoriten auswählen …", self.edit_pride_favorites)
 
     def _add_theme_action(self, menu: QMenu, name: str) -> None:
@@ -636,8 +639,9 @@ QLabel {{ background:transparent; }}
     def set_theme(self, name: str) -> None:
         if name not in BUILTIN_THEMES:
             return
-        self.theme = BUILTIN_THEMES[name]
         self.settings.theme = name
+        self.settings.theme_mix = []
+        self.theme = combine_themes([self.settings.theme])
         # Update the profile-level stylesheet too, so pages opened later receive the new theme.
         self._refresh_page_theme_script()
         self._apply_browser_theme()
@@ -1141,7 +1145,7 @@ QLabel {{ background:transparent; }}
         root.addWidget(intro)
 
         form = QFormLayout()
-        theme_css = QCheckBox("Webseiten an das aktive Nexlori-Theme anpassen", dialog)
+        theme_css = QCheckBox("Website-Farbschema unterstützen (Website-CSS bleibt erhalten)", dialog)
         theme_css.setChecked(self.settings.adapt_page_theme)
         ubol = QCheckBox("uBlock Origin Lite aktivieren (Werbung und Tracker blockieren)", dialog)
         ubol.setChecked(self.settings.ubol_enabled)
