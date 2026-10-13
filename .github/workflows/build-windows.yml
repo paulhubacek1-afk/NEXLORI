@@ -18,6 +18,7 @@ jobs:
   build:
     name: Build and test Nexlori.exe
     runs-on: windows-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: NEXLORI
@@ -54,7 +55,11 @@ jobs:
           if (-not (Test-Path $exe)) {
             throw "Build-Ausgabe fehlt: $exe"
           }
-          $process = Start-Process -FilePath $exe -ArgumentList @("--selftest", $out) -Wait -PassThru
+          $process = Start-Process -FilePath $exe -ArgumentList @("--selftest", $out) -PassThru
+          if (-not $process.WaitForExit(60000)) {
+            & taskkill.exe /PID $process.Id /T /F | Out-Null
+            throw "EXE-Selbsttest hängt länger als 60 Sekunden."
+          }
           if (Test-Path $out) {
             Get-Content $out
           }
