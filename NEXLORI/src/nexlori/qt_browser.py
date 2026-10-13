@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from PySide6.QtCore import QEventLoop, QPoint, QTimer, QUrl, Qt
-from PySide6.QtGui import QAction, QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -317,6 +317,9 @@ class NexloriWindow(QMainWindow):
     def _build_theme_menu(self) -> None:
         self.theme_menu = QMenu(self)
         self.theme_menu.setTitle("Theme")
+        self.theme_actions: dict[str, QAction] = {}
+        self.theme_action_group = QActionGroup(self)
+        self.theme_action_group.setExclusive(True)
         groups = (
             ("Basis", [n for n in ("hell", "dunkel", "ruhig", "hochkontrast") if n in BUILTIN_THEMES]),
             ("Pride", [n for n in BUILTIN_THEMES if n.startswith("pride-")]),
@@ -328,8 +331,11 @@ class NexloriWindow(QMainWindow):
             submenu = self.theme_menu.addMenu(label)
             for name in names:
                 theme = BUILTIN_THEMES[name]
-                action = QAction(theme.label, self, checkable=True)
+                action = QAction(theme.label, self)
+                action.setCheckable(True)
                 action.setChecked(name == self.settings.theme)
+                self.theme_action_group.addAction(action)
+                self.theme_actions[name] = action
                 action.triggered.connect(lambda _checked=False, n=name: self.set_theme(n))
                 submenu.addAction(action)
 
@@ -399,15 +405,14 @@ QLabel {{ background:transparent; }}
         self.accent_line.setStyleSheet(f"background:{_theme_gradient(theme)};")
         self.tabs.setStyleSheet(f"QTabWidget::pane {{ border:0; background:{theme.bg}; }}")
         self.statusBar().setStyleSheet(f"QStatusBar {{ background:{theme.surface}; color:{theme.fg}; }}")
-        if hasattr(self, "theme_menu"):
-            self._build_theme_menu()
-
     def set_theme(self, name: str) -> None:
         if name not in BUILTIN_THEMES:
             return
         self.theme = BUILTIN_THEMES[name]
         self.settings.theme = name
         self._apply_browser_theme()
+        for action_name, action in self.theme_actions.items():
+            action.setChecked(action_name == name)
         self._save_settings()
         for index in range(self.tabs.count()):
             view = self.tabs.widget(index)
@@ -428,23 +433,26 @@ QLabel {{ background:transparent; }}
         css_literal = json.dumps(css)
         return f"""(() => {{
 const id = 'nexlori-theme-user-style';
-const enabled = {str(enabled).lower()};
-const css = {css_literal};
+window.__nexloriThemeConfig = {{enabled:{str(enabled).lower()}, css:{css_literal}}};
 const remove = () => {{ const old = document.getElementById(id); if (old) old.remove(); }};
 const ensure = () => {{
+  const config = window.__nexloriThemeConfig;
   if (!document.documentElement) return;
+  if (!config.enabled) {{ remove(); return; }}
   let style = document.getElementById(id);
-  if (!enabled) {{ remove(); return; }}
   if (!style) {{
     style = document.createElement('style');
     style.id = id;
     (document.head || document.documentElement).appendChild(style);
   }}
-  if (style.textContent !== css) style.textContent = css;
+  if (style.textContent !== config.css) style.textContent = config.css;
 }};
 ensure();
 if (!window.__nexloriThemeObserver) {{
-  const observer = new MutationObserver(() => {{ if (enabled && !document.getElementById(id)) ensure(); }});
+  const observer = new MutationObserver(() => {{
+    const config = window.__nexloriThemeConfig;
+    if (config && config.enabled && !document.getElementById(id)) ensure();
+  }});
   if (document.documentElement) observer.observe(document.documentElement, {{childList:true, subtree:true}});
   window.__nexloriThemeObserver = observer;
 }}
@@ -536,11 +544,15 @@ if (!window.__nexloriThemeObserver) {{
             self._update_bookmark_button()
 
     def _on_url_changed(self, view: QWebEngineView, url: QUrl) -> None:
+        url_text = url.toString()
+        if url_text and url_text != "about:blank":
+            # The start page may navigate through its own search form or links.
+            view._nexlori_start = False
         if view is self.current_view():
-            if getattr(view, "_nexlori_start", False) and url.toString() == "about:blank":
+            if getattr(view, "_nexlori_start", False) and url_text == "about:blank":
                 self.address.clear()
             else:
-                self.address.setText(url.toString())
+                self.address.setText(url_text)
             self._update_navigation_state()
             self._update_bookmark_button()
 
@@ -563,7 +575,7 @@ if (!window.__nexloriThemeObserver) {{
                 "Geladen" if ok else "Seite konnte nicht vollständig geladen werden", 3500
             )
         self.apply_page_theme(view)
-        if getattr(view, "_nexlori_start", False):
+        if getattr(view, "_nexlori_start", False) and view.url().toString() == "about:blank":
             index = self.tabs.indexOf(view)
             if index >= 0:
                 self.tabs.setTabText(index, "Nexlori · Startseite")
