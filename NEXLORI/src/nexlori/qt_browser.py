@@ -1428,4 +1428,15 @@ def run(argv: list[str] | None = None) -> int:
         start_url = normalize_input(" ".join(arg for arg in argv if not arg.startswith("-")), settings.search_url)
     window = NexloriWindow(settings, settings_path, start_url)
     window.show()
+    # CI runners may not expose a native interactive desktop/window handle.
+    # A marker lets the Windows smoke test verify that construction reached show().
+    smoke_marker = os.environ.get("NEXLORI_SMOKE_MARKER")
+    if smoke_marker:
+        try:
+            Path(smoke_marker).write_text(
+                f"shown={window.isVisible()}\\ntitle={window.windowTitle()}\\nsize={window.width()}x{window.height()}\\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            print(f"Nexlori smoke marker could not be written: {exc}", file=sys.stderr)
     return app.exec()
