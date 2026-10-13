@@ -22,8 +22,10 @@ def release(version, *, draft=False, include_assets=True):
 
 
 def test_version_parser_and_ordering():
-    assert version_tuple("v1.2.3") == (1, 2, 3)
+    assert version_tuple("v1.2.3") == (1, 2, 3, 0)
     assert version_tuple("0.4.0") > version_tuple("0.3.9")
+    assert version_tuple("0.5.0-build.42") > version_tuple("0.5.0-build.41")
+    assert version_tuple("0.5.1") > version_tuple("0.5.0-build.999")
     with pytest.raises(ValueError):
         version_tuple("latest")
 
