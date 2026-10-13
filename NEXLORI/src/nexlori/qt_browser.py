@@ -52,6 +52,7 @@ from .core.settings import Settings, default_settings_path
 from .core.themes import BUILTIN_THEMES, Theme
 from .extension_utils import (
     bundled_ubolite_path,
+    unpack_extension_package,
     extension_key_from_info,
     extension_key_from_name,
     extension_name_from_info,
@@ -1034,8 +1035,13 @@ QLabel {{ background:transparent; }}
             )
             return
         try:
+            # Qt WebEngine's extension API accepts an unpacked extension directory,
+            # not the ZIP archive bundled with Nexlori. Unpack the already verified
+            # archive into the persistent profile before calling the native API.
+            extension_dir = self.storage_dir / "extensions" / "ublock-origin-lite"
+            unpacked = unpack_extension_package(package, extension_dir)
             self.statusBar().showMessage("uBlock Origin Lite wird zum ersten Mal eingerichtet …", 6000)
-            self.extension_manager.installExtension(str(package))
+            self.extension_manager.installExtension(str(unpacked))
         except Exception as exc:  # noqa: BLE001
             self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
 
@@ -1422,4 +1428,15 @@ def run(argv: list[str] | None = None) -> int:
         start_url = normalize_input(" ".join(arg for arg in argv if not arg.startswith("-")), settings.search_url)
     window = NexloriWindow(settings, settings_path, start_url)
     window.show()
+    # CI runners may not expose a native interactive desktop/window handle.
+    # A marker lets the Windows smoke test verify that construction reached show().
+    smoke_marker = os.environ.get("NEXLORI_SMOKE_MARKER")
+    if smoke_marker:
+        try:
+            Path(smoke_marker).write_text(
+                f"shown={window.isVisible()}\\ntitle={window.windowTitle()}\\nsize={window.width()}x{window.height()}\\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            print(f"Nexlori smoke marker could not be written: {exc}", file=sys.stderr)
     return app.exec()

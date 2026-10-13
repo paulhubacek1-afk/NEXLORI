@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import sys
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -183,3 +184,63 @@ def inspect_extension_package(path: str | Path) -> dict[str, Any]:
     finally:
         if archive is not None:
             archive.close()
+
+
+def unpack_extension_package(path: str | Path, destination: str | Path) -> Path:
+    """Return a validated unpacked MV3 extension directory for Qt WebEngine.
+
+    QWebEngineExtensionManager.installExtension expects a directory containing
+    manifest.json, not the ZIP file used by Nexlori's package manager. Extract
+    into a fresh sibling directory, validate paths, then atomically replace the
+    cached copy so interrupted extraction cannot leave a partial extension.
+    """
+    source = Path(path).expanduser().resolve()
+    target = Path(destination).expanduser().resolve()
+    details = inspect_extension_package(source)
+    if source.is_dir():
+        return source
+    if source.suffix.casefold() != ".zip":
+        raise ExtensionPackageError("Das Add-on muss als ZIP oder entpackter Ordner vorliegen.")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".extracting")
+    if temporary.exists():
+        shutil.rmtree(temporary)
+    temporary.mkdir(parents=True)
+    try:
+        with zipfile.ZipFile(source, "r") as archive:
+            infos = archive.infolist()
+            if len(infos) > MAX_EXTENSION_FILES:
+                raise ExtensionPackageError("Das Add-on enthält zu viele Dateien.")
+            expanded = sum(info.file_size for info in infos)
+            if expanded > MAX_EXTENSION_UNPACKED_BYTES:
+                raise ExtensionPackageError("Das entpackte Add-on wäre größer als erlaubt.")
+            root = temporary.resolve()
+            for info in infos:
+                member = PurePosixPath(info.filename.replace("\\\\", "/"))
+                if member.is_absolute() or ".." in member.parts:
+                    raise ExtensionPackageError("Die ZIP enthält einen unsicheren Dateipfad.")
+                # Reject Unix symlinks; extensions should only contain ordinary files/directories.
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    raise ExtensionPackageError("Die ZIP enthält einen nicht erlaubten symbolischen Link.")
+                output = (temporary / Path(*member.parts)).resolve()
+                if not output.is_relative_to(root):
+                    raise ExtensionPackageError("Die ZIP enthält einen unsicheren Dateipfad.")
+                if info.is_dir():
+                    output.mkdir(parents=True, exist_ok=True)
+                else:
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(info, "r") as incoming, output.open("wb") as outgoing:
+                        shutil.copyfileobj(incoming, outgoing)
+        manifest = temporary / "manifest.json"
+        if not manifest.is_file():
+            raise ExtensionPackageError("In der ZIP fehlt manifest.json im Hauptverzeichnis.")
+        inspect_extension_package(temporary)
+        if target.exists():
+            shutil.rmtree(target)
+        temporary.replace(target)
+        return target
+    except Exception:
+        if temporary.exists():
+            shutil.rmtree(temporary, ignore_errors=True)
+        raise
