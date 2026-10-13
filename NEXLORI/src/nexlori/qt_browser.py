@@ -4,6 +4,7 @@ The legacy renderer is kept for educational rendering tests; real pages are rend
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -12,10 +13,14 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from PySide6.QtCore import QEventLoop, QPoint, QThread, QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -23,6 +28,8 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QProgressBar,
+    QScrollArea,
+    QSpinBox,
     QTabWidget,
     QToolButton,
     QVBoxLayout,
@@ -43,6 +50,20 @@ from .core.themes import BUILTIN_THEMES, Theme, page_theme_css
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
+FEEDBACK_EMAIL = "nexlori-browser@gmx.at"
+REPOSITORY_URL = "https://github.com/paulhubacek1-afk/NEXLORI"
+
+
+def _qt_app_icon() -> QIcon:
+    """Create the same Pride-N icon used for the executable and installer."""
+    from .icon import make_icon
+
+    image = make_icon(256)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    pixmap = QPixmap()
+    pixmap.loadFromData(buffer.getvalue(), "PNG")
+    return QIcon(pixmap)
 
 
 def _theme_gradient(theme: Theme) -> str:
@@ -179,6 +200,7 @@ class NexloriWindow(QMainWindow):
         self.profile.downloadRequested.connect(self._download_requested)
 
         self.setWindowTitle("Nexlori")
+        self.setWindowIcon(_qt_app_icon())
         self.resize(1240, 820)
         self.setMinimumSize(760, 480)
         self._build_ui()
@@ -234,13 +256,18 @@ class NexloriWindow(QMainWindow):
         for button in (self.back_button, self.forward_button, self.reload_button, self.home_button):
             nav.addWidget(button)
 
+        # Keep the address/search pill visually centered between the navigation and tool clusters.
+        nav.addStretch(1)
         self.address = AddressBar(toolbar)
         self.address.setObjectName("addressBar")
         self.address.setPlaceholderText("Suchen oder Webadresse eingeben")
         self.address.setClearButtonEnabled(True)
         self.address.setMinimumHeight(42)
+        self.address.setMinimumWidth(220)
+        self.address.setMaximumWidth(self.settings.toolbar_search_width)
         self.address.returnPressed.connect(self.navigate_address)
-        nav.addWidget(self.address, 1)
+        nav.addWidget(self.address, 0)
+        nav.addStretch(1)
 
         self.bookmark_button = self._tool("☆", "Lesezeichen hinzufügen/entfernen", self.toggle_bookmark)
         nav.addWidget(self.bookmark_button)
@@ -259,6 +286,13 @@ class NexloriWindow(QMainWindow):
         nav.addWidget(self.theme_button)
         self.more_button = self._tool("⋮", "Nexlori-Menü", self.show_more_menu)
         nav.addWidget(self.more_button)
+        self.toolbar_icons = {
+            "home": self.home_button,
+            "bookmark": self.bookmark_button,
+            "spotify": self.music_button,
+            "page_theme": self.page_theme_button,
+            "theme": self.theme_button,
+        }
         outer.addWidget(toolbar)
 
         self.find_bar = QWidget(root)
@@ -289,6 +323,7 @@ class NexloriWindow(QMainWindow):
 
         self.setCentralWidget(root)
         self.statusBar().showMessage("Nexlori · Chromium-WebEngine")
+        self._apply_toolbar_preferences()
         self._build_theme_menu()
         self._build_more_menu()
 
@@ -307,9 +342,20 @@ class NexloriWindow(QMainWindow):
         self.theme_actions: dict[str, QAction] = {}
         self.theme_action_group = QActionGroup(self)
         self.theme_action_group.setExclusive(True)
+
+        favourites = self.theme_menu.addMenu("Deine 3 Pride-Favoriten")
+        chosen = [name for name in self.settings.pride_favorites if name in BUILTIN_THEMES]
+        if not chosen:
+            action = favourites.addAction("Noch keine Favoriten ausgewählt")
+            action.setEnabled(False)
+        for name in chosen:
+            self._add_theme_action(favourites, name)
+        favourites.addSeparator()
+        favourites.addAction("Favoriten auswählen …", self.edit_pride_favorites)
+
         groups = (
             ("Basis", [n for n in ("hell", "dunkel", "ruhig", "hochkontrast") if n in BUILTIN_THEMES]),
-            ("Pride", [n for n in BUILTIN_THEMES if n.startswith("pride-")]),
+            ("Alle Pride-Flaggen", [n for n in BUILTIN_THEMES if n.startswith("pride-")]),
             ("Weitere Looks", [n for n in BUILTIN_THEMES if n not in {"hell", "dunkel", "ruhig", "hochkontrast"} and not n.startswith("pride-")]),
         )
         for label, names in groups:
@@ -317,14 +363,70 @@ class NexloriWindow(QMainWindow):
                 continue
             submenu = self.theme_menu.addMenu(label)
             for name in names:
-                theme = BUILTIN_THEMES[name]
-                action = QAction(theme.label, self)
-                action.setCheckable(True)
-                action.setChecked(name == self.settings.theme)
-                self.theme_action_group.addAction(action)
-                self.theme_actions[name] = action
-                action.triggered.connect(lambda _checked=False, n=name: self.set_theme(n))
-                submenu.addAction(action)
+                self._add_theme_action(submenu, name)
+        self.theme_menu.addSeparator()
+        self.theme_menu.addAction("Drei Pride-Favoriten auswählen …", self.edit_pride_favorites)
+
+    def _add_theme_action(self, menu: QMenu, name: str) -> None:
+        theme = BUILTIN_THEMES[name]
+        # The same theme can appear in both favourites and the full collection.
+        action = QAction(theme.label, self, checkable=True)
+        action.setChecked(name == self.settings.theme)
+        action.triggered.connect(lambda _checked=False, n=name: self.set_theme(n))
+        menu.addAction(action)
+        if name not in self.theme_actions:
+            self.theme_actions[name] = action
+            self.theme_action_group.addAction(action)
+
+    def edit_pride_favorites(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Deine drei Pride-Favoriten")
+        dialog.resize(440, 520)
+        layout = QVBoxLayout(dialog)
+        note = QLabel("Wähle bis zu drei Pride-Flaggen für den Schnellzugriff im Theme-Menü.", dialog)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        list_layout = QVBoxLayout(content)
+        pride_names = [name for name in BUILTIN_THEMES if name.startswith("pride-")]
+        checks: dict[str, QCheckBox] = {}
+        initial = set(self.settings.pride_favorites)
+        count = QLabel("", dialog)
+
+        def update_count() -> None:
+            selected_count = sum(1 for checkbox in checks.values() if checkbox.isChecked())
+            count.setText(f"{selected_count}/3 ausgewählt")
+
+        def changed(checked: bool, own_name: str) -> None:
+            if checked and sum(1 for checkbox in checks.values() if checkbox.isChecked()) > 3:
+                checks[own_name].blockSignals(True)
+                checks[own_name].setChecked(False)
+                checks[own_name].blockSignals(False)
+                QMessageBox.information(dialog, "Maximal drei", "Du kannst genau bis zu drei Pride-Favoriten speichern.")
+            update_count()
+
+        for name in pride_names:
+            checkbox = QCheckBox(BUILTIN_THEMES[name].label, content)
+            checkbox.setChecked(name in initial)
+            checkbox.toggled.connect(lambda checked, n=name: changed(checked, n))
+            checks[name] = checkbox
+            list_layout.addWidget(checkbox)
+        list_layout.addStretch(1)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+        layout.addWidget(count)
+        update_count()
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel, parent=dialog)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.settings.pride_favorites = [name for name in pride_names if checks[name].isChecked()]
+            self._save_settings()
+            self._build_theme_menu()
+            self.statusBar().showMessage("Pride-Favoriten gespeichert.", 2500)
 
     def _build_more_menu(self) -> None:
         self.more_menu = QMenu(self)
@@ -370,6 +472,7 @@ class NexloriWindow(QMainWindow):
 
     def _apply_browser_theme(self) -> None:
         theme = self.theme
+        icon_px = self.settings.toolbar_icon_size
         self.setStyleSheet(f"""
 QMainWindow, QWidget {{ background:{theme.bg}; color:{theme.fg}; }}
 QWidget#toolbar {{ background:{theme.bg}; }}
@@ -379,10 +482,10 @@ QTabBar::tab {{ background:{theme.surface}; color:{theme.fg}; border:1px solid t
  border-top-left-radius:10px; border-top-right-radius:10px; padding:10px 13px; margin-right:3px; min-width:90px; }}
 QTabBar::tab:selected {{ background:{theme.bg}; border-color:{theme.surface}; border-bottom:2px solid {theme.accent}; }}
 QTabBar::tab:hover {{ background:{theme.bg}; }}
-QToolButton {{ color:{theme.fg}; background:transparent; border:0; border-radius:12px; min-width:34px; min-height:34px; padding:3px; font-size:17px; }}
+QToolButton {{ color:{theme.fg}; background:transparent; border:0; border-radius:12px; min-width:{icon_px + 16}px; min-height:{icon_px + 16}px; padding:3px; font-size:{icon_px}px; }}
 QToolButton:hover {{ background:{theme.surface}; }}
 QToolButton:pressed, QToolButton:checked {{ background:{theme.surface}; color:{theme.accent}; }}
-QToolButton#newTabButton {{ font-size:21px; min-width:36px; min-height:36px; }}
+QToolButton#newTabButton {{ font-size:{icon_px + 3}px; min-width:{icon_px + 18}px; min-height:{icon_px + 18}px; }}
 QLineEdit {{ background:{theme.surface}; color:{theme.fg}; selection-background-color:{theme.accent}; selection-color:{theme.bg}; border:1px solid {theme.surface}; border-radius:16px; padding:9px 15px; }}
 QLineEdit:focus {{ border:1px solid {theme.accent}; }}
 QLineEdit#addressBar {{ font-size:14px; }}
