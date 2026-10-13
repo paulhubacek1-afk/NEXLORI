@@ -76,6 +76,28 @@ def _localized_name(manifest: dict[str, Any], base: Path | None, archive: zipfil
         return raw
 
 
+def extension_name_from_info(extension: Any) -> str:
+    """Resolve localized names from an installed Qt extension's manifest."""
+    name = str(extension.name() or "").strip()
+    try:
+        base = Path(str(extension.path()))
+        manifest_path = base / "manifest.json"
+        if manifest_path.is_file() and manifest_path.stat().st_size <= MAX_MANIFEST_BYTES:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(manifest, dict):
+                localized = _localized_name(manifest, base, None)
+                if localized and not localized.startswith("__MSG_"):
+                    return localized
+    except (AttributeError, OSError, ValueError, TypeError, UnicodeDecodeError):
+        pass
+    return name or "Unbenannte Erweiterung"
+
+
+def extension_key_from_info(extension: Any) -> str:
+    """Get a stable identity even when the manifest uses Chrome's __MSG_*__ names."""
+    return extension_key_from_name(extension_name_from_info(extension))
+
+
 def inspect_extension_package(path: str | Path) -> dict[str, Any]:
     """Validate a ZIP or unpacked extension before giving it to Qt's extension manager.
 
