@@ -17,6 +17,7 @@ from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon, QKeySe
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -342,6 +343,7 @@ class NexloriWindow(QMainWindow):
         self.theme_actions: dict[str, QAction] = {}
         self.theme_action_group = QActionGroup(self)
         self.theme_action_group.setExclusive(True)
+        self._theme_action_copies: dict[str, list[QAction]] = {}
 
         favourites = self.theme_menu.addMenu("Deine 3 Pride-Favoriten")
         chosen = [name for name in self.settings.pride_favorites if name in BUILTIN_THEMES]
@@ -374,9 +376,9 @@ class NexloriWindow(QMainWindow):
         action.setChecked(name == self.settings.theme)
         action.triggered.connect(lambda _checked=False, n=name: self.set_theme(n))
         menu.addAction(action)
-        if name not in self.theme_actions:
-            self.theme_actions[name] = action
-            self.theme_action_group.addAction(action)
+        self.theme_action_group.addAction(action)
+        self._theme_action_copies.setdefault(name, []).append(action)
+        self.theme_actions.setdefault(name, action)
 
     def edit_pride_favorites(self) -> None:
         dialog = QDialog(self)
@@ -428,6 +430,103 @@ class NexloriWindow(QMainWindow):
             self._build_theme_menu()
             self.statusBar().showMessage("Pride-Favoriten gespeichert.", 2500)
 
+    def _apply_toolbar_preferences(self) -> None:
+        for name, button in self.toolbar_icons.items():
+            button.setVisible(name in self.settings.toolbar_visible_icons)
+        self.address.setMaximumWidth(self.settings.toolbar_search_width)
+        self.address.setMinimumWidth(min(220, self.settings.toolbar_search_width))
+        self._apply_browser_theme()
+
+    def customize_toolbar(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nexlori oben anpassen")
+        dialog.setMinimumWidth(470)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Passe die zentrierte Suchleiste, die Icon-Größe und die sichtbaren Schnellzugriffe an. "
+            "Das Seiten-Theme-CSS bleibt davon unberührt.",
+            dialog,
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        form = QFormLayout()
+        search_width = QSpinBox(dialog)
+        search_width.setRange(360, 1000)
+        search_width.setSingleStep(40)
+        search_width.setSuffix(" px")
+        search_width.setValue(self.settings.toolbar_search_width)
+        form.addRow("Breite der Suchleiste", search_width)
+
+        icon_size = QSpinBox(dialog)
+        icon_size.setRange(14, 30)
+        icon_size.setSuffix(" px")
+        icon_size.setValue(self.settings.toolbar_icon_size)
+        form.addRow("Icon-Größe", icon_size)
+
+        search_engine = QComboBox(dialog)
+        providers = {
+            "DuckDuckGo": "https://duckduckgo.com/?q={}",
+            "Google": "https://www.google.com/search?q={}",
+            "Bing": "https://www.bing.com/search?q={}",
+            "Ecosia": "https://www.ecosia.org/search?q={}",
+        }
+        for label, url in providers.items():
+            search_engine.addItem(label, url)
+        selected = search_engine.findData(self.settings.search_url)
+        if selected < 0 and "duckduckgo" in self.settings.search_url.lower():
+            selected = 0
+        if selected >= 0:
+            search_engine.setCurrentIndex(selected)
+        form.addRow("Suchmaschine", search_engine)
+        layout.addLayout(form)
+
+        icon_group = QWidget(dialog)
+        icon_layout = QVBoxLayout(icon_group)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_layout.addWidget(QLabel("Schnellzugriffe anzeigen", icon_group))
+        labels = {
+            "home": "Startseite",
+            "bookmark": "Lesezeichen",
+            "spotify": "Spotify Mini-Player",
+            "page_theme": "Website-Farben (Aa)",
+            "theme": "Theme-Auswahl",
+        }
+        checks: dict[str, QCheckBox] = {}
+        for name, label in labels.items():
+            check = QCheckBox(label, icon_group)
+            check.setChecked(name in self.settings.toolbar_visible_icons)
+            checks[name] = check
+            icon_layout.addWidget(check)
+        layout.addWidget(icon_group)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.settings.toolbar_search_width = search_width.value()
+        self.settings.toolbar_icon_size = icon_size.value()
+        if search_engine.currentData():
+            self.settings.search_url = str(search_engine.currentData())
+        self.settings.toolbar_visible_icons = [
+            name for name, check in checks.items() if check.isChecked()
+        ]
+        self._save_settings()
+        self._apply_toolbar_preferences()
+        self.statusBar().showMessage("Deine Browserleiste wurde angepasst.", 3000)
+
+    def open_feedback_email(self) -> None:
+        QDesktopServices.openUrl(QUrl(f"mailto:{FEEDBACK_EMAIL}?subject=Nexlori%20-%20Anliegen%20oder%20Verbesserung"))
+
+    def open_feedback_github(self) -> None:
+        QDesktopServices.openUrl(QUrl(f"{REPOSITORY_URL}/issues/new?title=Nexlori%20Feedback"))
+
     def _build_more_menu(self) -> None:
         self.more_menu = QMenu(self)
         self.more_menu.addAction("Neuer Tab", self.new_tab, QKeySequence("Ctrl+T"))
@@ -436,11 +535,15 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addSeparator()
         self.more_menu.addAction("Spotify Mini-Player", self.show_spotify_popup, QKeySequence("Ctrl+Shift+M"))
         self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
+        self.more_menu.addAction("Browserleiste anpassen …", self.customize_toolbar)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Downloads-Ordner öffnen", self.open_download_folder)
         self.more_menu.addAction("Webseite neu laden", self.reload_current, QKeySequence("F5"))
         self.more_menu.addAction("Theme auswählen", self.show_theme_menu)
         self.more_menu.addAction("Nach Updates suchen", self.check_for_updates)
+        self.more_menu.addSeparator()
+        self.more_menu.addAction("Feedback per E-Mail …", self.open_feedback_email)
+        self.more_menu.addAction("Verbesserung auf GitHub melden …", self.open_feedback_github)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Über Nexlori", self.show_about)
         self.more_menu.addAction("Beenden", self.close, QKeySequence("Alt+F4"))
@@ -507,8 +610,9 @@ QLabel {{ background:transparent; }}
         self.theme = BUILTIN_THEMES[name]
         self.settings.theme = name
         self._apply_browser_theme()
-        for action_name, action in self.theme_actions.items():
-            action.setChecked(action_name == name)
+        for action_name, actions in self._theme_action_copies.items():
+            for action in actions:
+                action.setChecked(action_name == name)
         self._save_settings()
         for index in range(self.tabs.count()):
             view = self.tabs.widget(index)
@@ -1048,6 +1152,7 @@ def run(argv: list[str] | None = None) -> int:
     app = QApplication.instance() or QApplication([APP_NAME])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName("Nexlori")
+    app.setWindowIcon(_qt_app_icon())
     app.setStyle("Fusion")
     start_url = None
     if argv:
