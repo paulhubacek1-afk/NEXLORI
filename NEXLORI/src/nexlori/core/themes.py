@@ -76,6 +76,58 @@ def accessibility_issues(theme: Theme) -> list[str]:
     return issues
 
 
+def page_theme_css(theme: Theme) -> str:
+    """Locally recolour a webpage without filtering images, video or the site's layout."""
+    light = theme.name in {"hell", "ruhig"}
+    scheme = "light" if light else "dark"
+    return f"""
+:root {{
+  color-scheme: {scheme} !important;
+  --nexlori-page-bg: {theme.bg};
+  --nexlori-page-surface: {theme.surface};
+  --nexlori-page-text: {theme.fg};
+  --nexlori-page-accent: {theme.accent};
+}}
+html, body {{
+  background-color: var(--nexlori-page-bg) !important;
+  color: var(--nexlori-page-text) !important;
+}}
+/* Apply the active text and border palette broadly while preserving media and vector icons. */
+*:not(img):not(video):not(audio):not(canvas):not(svg):not(path):not(iframe):not(picture):not(source) {{
+  color: var(--nexlori-page-text) !important;
+  border-color: var(--nexlori-page-accent) !important;
+}}
+/* Recolour common solid page surfaces without replacing background images or gradients. */
+main, article, section, aside, nav, header, footer, table, thead, tbody, tfoot, tr, td, th,
+form, fieldset, dialog, details, [role="main"], [role="navigation"], [role="banner"],
+[role="contentinfo"], [role="dialog"], [role="region"], [class*="card" i], [class*="panel" i],
+[class*="modal" i], [class*="surface" i] {{
+  background-color: var(--nexlori-page-surface) !important;
+}}
+a, a:visited, [role="link"] {{
+  color: var(--nexlori-page-accent) !important;
+}}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea, select, option {{
+  background-color: var(--nexlori-page-surface) !important;
+  color: var(--nexlori-page-text) !important;
+  border-color: var(--nexlori-page-accent) !important;
+}}
+button, [role="button"], input[type="button"], input[type="submit"] {{
+  color: var(--nexlori-page-text) !important;
+  border-color: var(--nexlori-page-accent) !important;
+}}
+::selection {{
+  background: var(--nexlori-page-accent) !important;
+  color: var(--nexlori-page-bg) !important;
+}}
+::-webkit-scrollbar-thumb {{
+  background: var(--nexlori-page-accent) !important;
+}}
+/* Images, video, canvas and site layout are left untouched. */
+"""
+
+
 def _pride(name: str, label: str, accent: str, stripes: tuple[str, ...]) -> Theme:
     return Theme(name, label, "#15131A", "#221F2B", "#F3F1F7", accent, stripes)
 
@@ -94,6 +146,28 @@ _THEMES = [
            ("#D52D00", "#EF7627", "#FF9A56", "#FFFFFF", "#D162A4", "#B55690", "#A30262")),
     _pride("pride-nonbinaer", "Pride – Nichtbinär", "#B07FE0", ("#FCF434", "#FFFFFF", "#9C59D1", "#2C2C2C")),
     _pride("pride-asexuell", "Pride – Asexuell", "#B57BD8", ("#000000", "#A3A3A3", "#FFFFFF", "#800080")),
+    _pride("pride-gay", "Pride – Gay", "#7DD3FC",
+           ("#078D70", "#26CEAA", "#98E8C1", "#FFFFFF", "#7BADE2", "#5049CC", "#3D1A78")),
+    _pride("pride-genderfluid", "Pride – Genderfluid", "#D9A9EF",
+           ("#B57EDC", "#FFFFFF", "#000000", "#F5A9B8", "#5BCEFA")),
+    _pride("pride-aromantisch", "Pride – Aromantisch", "#8DD6B2",
+           ("#3DA542", "#A7D379", "#FFFFFF", "#A9A9A9", "#000000")),
+    _pride("pride-queer", "Pride – Queer", "#F39BD2",
+           ("#E40303", "#FF8C00", "#FFED00", "#008026", "#004DFF", "#750787")),
+    Theme("gothic", "Gothic", "#100C14", "#211927", "#F4EAF6", "#E29BCE",
+          ("#151018", "#4D2D58", "#A55A97", "#D8A8CE")),
+    Theme("cyberpunk", "Cyberpunk", "#100A24", "#211743", "#F8F0FF", "#F72585",
+          ("#F72585", "#7209B7", "#3A0CA3", "#4CC9F0")),
+    Theme("forest", "Wald", "#0D1B15", "#193126", "#EAF7EF", "#78D6A3",
+          ("#173B2B", "#397A51", "#78D6A3")),
+    Theme("ocean", "Ozean", "#0C1724", "#162A3D", "#ECF7FF", "#77D4FF",
+          ("#0C1724", "#176B87", "#77D4FF")),
+    Theme("sakura", "Sakura", "#261722", "#3B2134", "#FFF1F8", "#FF9ACF",
+          ("#FF9ACF", "#E9B7D1", "#B77D9C")),
+    Theme("mitternacht", "Mitternacht", "#090D18", "#141A2B", "#F0F4FF", "#93AFFF",
+          ("#090D18", "#263B75", "#93AFFF")),
+    Theme("kaffee", "Kaffee", "#211812", "#34251B", "#FFF3E3", "#E5B77C",
+          ("#38251B", "#885B37", "#E5B77C")),
 ]
 BUILTIN_THEMES: dict[str, Theme] = {t.name: t for t in _THEMES}
 

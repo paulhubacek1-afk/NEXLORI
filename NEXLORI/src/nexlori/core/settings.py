@@ -31,6 +31,7 @@ class Settings:
     site_allowlist: list[str] = field(default_factory=list)
     search_url: str = "https://html.duckduckgo.com/html/?q={}"  # {} wird durch die Suchanfrage ersetzt
     page_zoom: float = 1.0  # zusätzlich zur Bildschirmskalierung
+    adapt_page_theme: bool = True  # injiziert eine optionale, lokale Nutzer-Stylesheet in Websites
 
     def problems(self) -> list[str]:
         out = []
@@ -50,6 +51,8 @@ class Settings:
             out.append("search_url: muss mit https:// beginnen und genau einmal {} enthalten")
         if not isinstance(self.page_zoom, (int, float)) or not 0.5 <= self.page_zoom <= 3.0:
             out.append("page_zoom: zwischen 0.5 und 3.0 erwartet")
+        if not isinstance(self.adapt_page_theme, bool):
+            out.append("adapt_page_theme: true oder false erwartet")
         return out
 
     @classmethod
