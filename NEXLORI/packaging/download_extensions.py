@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 import urllib.request
 import zipfile
@@ -69,8 +70,8 @@ def main() -> int:
         if b"GNU GENERAL PUBLIC LICENSE" not in license_text:
             raise RuntimeError("Die uBOL-Lizenzdatei konnte nicht verifiziert werden.")
         zip_path.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(temporary_zip, zip_path)
-        os.replace(license_temp, license_path)
+        shutil.copy2(temporary_zip, zip_path)
+        shutil.copy2(license_temp, license_path)
     print(f"uBlock Origin Lite {VERSION}: SHA-256 verifiziert, Manifest V3 geprüft.")
     print(f"Bundle: {zip_path} ({zip_path.stat().st_size} Bytes)")
     print(f"Lizenz: {license_path}")
