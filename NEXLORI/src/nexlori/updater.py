@@ -122,7 +122,12 @@ def _download(url: str, target: Path, *, timeout: float = 35.0, max_bytes: int =
 
 def download_verified_update(release: dict[str, Any], destination_dir: str | Path) -> Path:
     """Download the EXE and verify it against that release's SHA-256 sidecar."""
-    assets = {item.get("name"): item.get("url") for item in release.get("assets", [])}
+    # check_for_update returns a normalized release; accepting GitHub's raw key as well keeps helpers testable.
+    assets = {
+        item.get("name"): (item.get("url") or item.get("browser_download_url"))
+        for item in release.get("assets", [])
+        if isinstance(item, dict)
+    }
     exe_url, hash_url = assets.get("Nexlori.exe"), assets.get("Nexlori.exe.sha256")
     if not exe_url or not hash_url:
         raise UpdateError("Dem Release fehlen Nexlori.exe oder die SHA-256-Prüfsumme.")
