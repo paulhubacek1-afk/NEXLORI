@@ -18,6 +18,13 @@ def test_website_theme_css_uses_the_selected_palette():
     assert "textarea" in css
 
 
+def test_website_theme_css_recolours_common_page_surfaces():
+    css = page_theme_css(BUILTIN_THEMES["gothic"])
+    assert "*:not(img)" in css
+    assert '[class*="card" i]' in css
+    assert "background-color: var(--nexlori-page-surface) !important" in css
+
+
 def test_website_theme_css_leaves_media_and_layout_intact():
     css = page_theme_css(BUILTIN_THEMES["pride-gay"])
     assert "Images, video, canvas" in css
