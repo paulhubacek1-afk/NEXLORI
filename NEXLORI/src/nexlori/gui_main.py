@@ -37,7 +37,17 @@ def selftest(out_path: str | None = None) -> int:
     except Exception as exc:  # noqa: BLE001
         _write(out_path, f"FEHLER Tk: {type(exc).__name__}: {exc}")
         return 3
-    _write(out_path, f"OK Nexlori {__version__} ({len(texts)} Textelemente, {image.width}x{image.height})")
+    try:
+        from .qt_browser import _selftest_webengine
+
+        ok, detail = _selftest_webengine()
+        if not ok:
+            _write(out_path, f"FEHLER Chromium-WebEngine: {detail}")
+            return 4
+    except Exception as exc:  # noqa: BLE001
+        _write(out_path, f"FEHLER Chromium-WebEngine: {type(exc).__name__}: {exc}")
+        return 4
+    _write(out_path, f"OK Nexlori {__version__} · Renderer {len(texts)} Textelemente · Chromium-WebEngine {detail}")
     return 0
 
 
@@ -54,6 +64,10 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] in (["--version"], ["-V"]):
         print(f"Nexlori {__version__}")
         return 0
-    from .gui import run
+    if argv[:1] == ["--legacy"]:
+        from .gui import run
+
+        return run(argv[1:])
+    from .qt_browser import run
 
     return run(argv)
