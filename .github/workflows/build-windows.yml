@@ -117,16 +117,19 @@ jobs:
         shell: pwsh
         run: |
           $exe = Join-Path $PWD "dist\Nexlori.exe"
-          $log = Join-Path $PWD "gui-smoke-test.txt"
-          $process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $log -RedirectStandardError $log
+          $stdout = Join-Path $PWD "gui-smoke-test.stdout.txt"
+          $stderr = Join-Path $PWD "gui-smoke-test.stderr.txt"
+          $process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           $deadline = (Get-Date).AddSeconds(35)
           $windowFound = $false
           while ((Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 500
             $process.Refresh()
             if ($process.HasExited) {
-              $details = if (Test-Path $log) { Get-Content $log -Raw } else { "(keine Konsolenausgabe; GUI-Prozess wurde beendet)" }
-              throw "Nexlori wurde beendet, bevor das Browserfenster erschien. Exit-Code: $($process.ExitCode). $details"
+              $details = @()
+              if (Test-Path $stdout) { $details += Get-Content $stdout -Raw }
+              if (Test-Path $stderr) { $details += Get-Content $stderr -Raw }
+              throw "Nexlori wurde beendet, bevor das Browserfenster erschien. Exit-Code: $($process.ExitCode). $($details -join [Environment]::NewLine)"
             }
             if ($process.MainWindowHandle -ne 0) {
               $windowFound = $true
