@@ -227,6 +227,8 @@ class NexloriWindow(QMainWindow):
             self.navigate_view(view, start_url)
         QTimer.singleShot(1200, self._ensure_default_extension)
         if self.settings.auto_update_check:
+            QTimer.singleShot(1200, self._ensure_default_extension)
+        if self.settings.auto_update_check:
             QTimer.singleShot(2500, self._start_silent_update_check)
 
     def _build_ui(self) -> None:
@@ -554,6 +556,8 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addSeparator()
         self.more_menu.addAction("Spotify Mini-Player", self.show_spotify_popup, QKeySequence("Ctrl+Shift+M"))
         self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
+        self.more_menu.addAction("Add-ons verwalten", self.show_extensions_manager)
+        self.more_menu.addAction("Einstellungen", self.show_settings, QKeySequence("Ctrl+,"))
         self.more_menu.addAction("Browserleiste anpassen …", self.customize_toolbar)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Downloads-Ordner öffnen", self.open_download_folder)
@@ -581,6 +585,7 @@ class NexloriWindow(QMainWindow):
             ("Ctrl+D", self.toggle_bookmark),
             ("Ctrl+Shift+M", self.show_spotify_popup),
             ("Ctrl+Shift+P", self.show_password_manager),
+            ("Ctrl+,", self.show_settings),
             ("Ctrl+Plus", lambda: self.change_zoom(0.1)),
             ("Ctrl+Minus", lambda: self.change_zoom(-0.1)),
             ("Ctrl+0", lambda: self.set_zoom(1.0)),
@@ -994,6 +999,196 @@ QLabel {{ background:transparent; }}
         path = Path.home() / "Downloads"
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _ensure_default_extension(self) -> None:
+        """Install the bundled official uBlock Origin Lite package for a fresh profile."""
+        if self.extension_manager is None:
+            self.statusBar().showMessage(
+                "Add-ons benötigen Qt WebEngine 6.10 oder neuer.", 6000
+            )
+            return
+        try:
+            extensions = list(self.extension_manager.extensions())
+        except (AttributeError, RuntimeError):
+            extensions = []
+        installed = any(
+            extension_key_from_name(str(ext.name() or "")) == "ublock-origin-lite"
+            and bool(ext.isInstalled())
+            for ext in extensions
+        )
+        if installed:
+            self._sync_extension_states()
+            return
+        package = bundled_ubolite_path()
+        if package is None:
+            self.statusBar().showMessage(
+                "uBlock Origin Lite fehlt in diesem Build. Du kannst ein MV3-Add-on manuell installieren.",
+                7000,
+            )
+            return
+        try:
+            self.statusBar().showMessage("uBlock Origin Lite wird zum ersten Mal eingerichtet …", 6000)
+            self.extension_manager.installExtension(str(package))
+        except Exception as exc:  # noqa: BLE001
+            self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
+
+    def _on_extension_installed(self, extension) -> None:
+        try:
+            if not extension.isInstalled():
+                reason = str(extension.error() or "Unbekannter Installationsfehler")
+                self.statusBar().showMessage(f"Add-on-Installation fehlgeschlagen: {reason}", 8000)
+                return
+            name = str(extension.name() or "Unbenanntes Add-on")
+            key = extension_key_from_name(name)
+            enabled = bool(self.settings.ubol_enabled) if key == "ublock-origin-lite" else True
+            self.settings.extensions_enabled[key] = enabled
+            if key == "ublock-origin-lite":
+                self.settings.ubol_enabled = enabled
+            self.extension_manager.setExtensionEnabled(extension, enabled)
+            self._save_settings()
+            self.statusBar().showMessage(
+                f"{name} wurde installiert und {'aktiviert' if enabled else 'deaktiviert'}.", 5000
+            )
+            QTimer.singleShot(200, self._sync_extension_states)
+        except Exception as exc:  # noqa: BLE001
+            self.statusBar().showMessage(f"Add-on konnte nicht aktiviert werden: {exc}", 8000)
+
+    def _sync_extension_states(self) -> None:
+        """Restore each add-on's persisted enabled state; Qt loads installed extensions disabled."""
+        if self.extension_manager is None:
+            return
+        try:
+            for extension in self.extension_manager.extensions():
+                if not extension.isLoaded():
+                    continue
+                key = extension_key_from_name(str(extension.name() or ""))
+                if not key:
+                    continue
+                if key == "ublock-origin-lite":
+                    enabled = bool(self.settings.ubol_enabled)
+                else:
+                    enabled = bool(self.settings.extensions_enabled.get(key, False))
+                if bool(extension.isEnabled()) != enabled:
+                    self.extension_manager.setExtensionEnabled(extension, enabled)
+        except (AttributeError, RuntimeError):
+            return
+
+    def set_extension_enabled(self, extension, enabled: bool) -> None:
+        if self.extension_manager is None:
+            raise RuntimeError("Qt WebEngine unterstützt in diesem Build keine Erweiterungen.")
+        name = str(extension.name() or "Unbenanntes Add-on")
+        key = extension_key_from_name(name)
+        self.extension_manager.setExtensionEnabled(extension, bool(enabled))
+        self.settings.extensions_enabled[key] = bool(enabled)
+        if key == "ublock-origin-lite":
+            self.settings.ubol_enabled = bool(enabled)
+        self._save_settings()
+        self.statusBar().showMessage(f"{name}: {'aktiviert' if enabled else 'deaktiviert'}", 3000)
+
+    def show_extensions_manager(self) -> None:
+        if self.extension_manager is None:
+            QMessageBox.warning(
+                self, "Add-ons nicht verfügbar",
+                "Browser-Erweiterungen erfordern Qt WebEngine 6.10 oder neuer.",
+            )
+            return
+        try:
+            from .extensions_ui import ExtensionsDialog
+            ExtensionsDialog(self, self).exec()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Add-ons", f"Der Add-on-Manager konnte nicht geöffnet werden: {exc}")
+
+    def show_settings(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nexlori · Einstellungen")
+        dialog.setMinimumWidth(560)
+        root = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Hier verwaltest du Datenschutz, Website-Darstellung, Updates und das Verhalten von Nexlori.",
+            dialog,
+        )
+        intro.setWordWrap(True)
+        root.addWidget(intro)
+
+        form = QFormLayout()
+        theme_css = QCheckBox("Webseiten an das aktive Nexlori-Theme anpassen", dialog)
+        theme_css.setChecked(self.settings.adapt_page_theme)
+        ubol = QCheckBox("uBlock Origin Lite aktivieren (Werbung und Tracker blockieren)", dialog)
+        ubol.setChecked(self.settings.ubol_enabled)
+        updates = QCheckBox("Beim Start automatisch nach Updates suchen", dialog)
+        updates.setChecked(self.settings.auto_update_check)
+        popups = QCheckBox("Website-Pop-ups und neue Fenster erlauben", dialog)
+        popups.setChecked(self.settings.allow_web_popups)
+
+        zoom = QDoubleSpinBox(dialog)
+        zoom.setRange(0.5, 3.0)
+        zoom.setSingleStep(0.1)
+        zoom.setSuffix("×")
+        zoom.setValue(float(self.settings.page_zoom))
+
+        search_engine = QComboBox(dialog)
+        providers = {
+            "DuckDuckGo": "https://html.duckduckgo.com/html/?q={}",
+            "Google": "https://www.google.com/search?q={}",
+            "Bing": "https://www.bing.com/search?q={}",
+            "Ecosia": "https://www.ecosia.org/search?q={}",
+        }
+        for label, template in providers.items():
+            search_engine.addItem(label, template)
+        selected = search_engine.findData(self.settings.search_url)
+        if selected < 0:
+            selected = next(
+                (
+                    i for i in range(search_engine.count())
+                    if self.settings.search_url.startswith(str(search_engine.itemData(i)).split("{")[0])
+                ),
+                0,
+            )
+        search_engine.setCurrentIndex(max(0, selected))
+
+        form.addRow("Website-Farben", theme_css)
+        form.addRow("Werbe- und Trackerschutz", ubol)
+        form.addRow("Updates", updates)
+        form.addRow("Pop-ups", popups)
+        form.addRow("Standard-Zoom", zoom)
+        form.addRow("Suchmaschine", search_engine)
+        root.addLayout(form)
+
+        actions = QHBoxLayout()
+        addons = QPushButton("Add-ons verwalten …", dialog)
+        addons.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.show_extensions_manager)))
+        toolbar = QPushButton("Browserleiste anpassen …", dialog)
+        toolbar.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.customize_toolbar)))
+        actions.addWidget(addons)
+        actions.addWidget(toolbar)
+        root.addLayout(actions)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        root.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.settings.adapt_page_theme = theme_css.isChecked()
+        self.settings.ubol_enabled = ubol.isChecked()
+        self.settings.auto_update_check = updates.isChecked()
+        self.settings.allow_web_popups = popups.isChecked()
+        self.settings.page_zoom = float(zoom.value())
+        self.settings.search_url = str(search_engine.currentData())
+        self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
+        self._refresh_page_theme_script()
+        self._sync_extension_states()
+        self._save_settings()
+        for index in range(self.tabs.count()):
+            view = self.tabs.widget(index)
+            if isinstance(view, QWebEngineView):
+                view.setZoomFactor(self.settings.page_zoom)
+                self.apply_page_theme(view)
+        self.statusBar().showMessage("Einstellungen gespeichert.", 3000)
 
     def show_spotify_popup(self) -> None:
         try:
