@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QEventLoop, QPoint, QThread, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import QEventLoop, QEasingCurve, QPoint, QPropertyAnimation, QThread, QTimer, QUrl, QUrlQuery, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QGraphicsOpacityEffect,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -44,6 +45,7 @@ from PySide6.QtWebEngineCore import (
     QWebEngineProfile,
     QWebEngineScript,
     QWebEngineSettings,
+    QWebEngineUrlRequestInterceptor,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
@@ -51,6 +53,8 @@ from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
 from .core.themes import BUILTIN_THEMES, Theme, combine_themes, relative_luminance
+from .default_browser import default_browser_settings_uri, register_windows_browser
+from .web_safety import addons_page_html, error_page_html, home_network_page_html, is_nsfw_url, normalize_home_target
 from .extension_utils import (
     bundled_ubolite_path,
     unpack_extension_package,
@@ -67,11 +71,11 @@ FEEDBACK_EMAIL = "nexlori-browser@gmx.at"
 REPOSITORY_URL = "https://github.com/paulhubacek1-afk/NEXLORI"
 
 
-def _qt_app_icon() -> QIcon:
-    """Create the same Pride-N icon used for the executable and installer."""
+def _qt_app_icon(theme: Theme | None = None) -> QIcon:
+    """Create the application icon from the active theme palette."""
     from .icon import make_icon
 
-    image = make_icon(256)
+    image = make_icon(256, theme=theme)
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     pixmap = QPixmap()
