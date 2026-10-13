@@ -1,5 +1,12 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.0.1 – Startstabilität und Release-Prüfungen
+
+- Der Windows-Build prüft zusätzlich, ob sich das tatsächliche Browserfenster öffnen lässt, statt nur interne Komponenten zu testen.
+- Ein Startfehler, ein sofort beendeter Prozess oder ein fehlendes Fenster lässt den Release-Build jetzt fehlschlagen.
+- Versionsnummer auf 1.0.1 für den korrigierten Build angehoben.
+
+
 ## 1.0.0 – Erste offizielle Windows-Version
 
 - Chromium-basierter Browser mit Tabs, Adress-/Suchleiste, Lesezeichen, Verlauf, Downloads, Seitensuche und Zoom.
