@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QProgressBar,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QTabWidget,
@@ -49,7 +50,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
-from .core.themes import BUILTIN_THEMES, Theme
+from .core.themes import BUILTIN_THEMES, Theme, combine_themes, relative_luminance
 from .extension_utils import (
     bundled_ubolite_path,
     unpack_extension_package,
@@ -93,7 +94,7 @@ def _start_page(theme: Theme) -> str:
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Nexlori · Startseite</title>
 <style>
-:root {{ color-scheme: {'light' if theme.name in {'hell','ruhig'} else 'dark'}; }}
+:root {{ color-scheme: {'light' if relative_luminance(theme.bg) >= 0.5 else 'dark'}; }}
 * {{ box-sizing:border-box }}
 body {{ margin:0; min-height:100vh; background:{theme.bg}; color:{theme.fg}; font:16px 'Segoe UI',sans-serif;
  display:grid; place-items:center; }}
@@ -203,7 +204,7 @@ class NexloriWindow(QMainWindow):
         self._update_worker: UpdateWorker | None = None
         self._silent_update_check = True
         self._spotify_popup = None
-        self.theme = BUILTIN_THEMES.get(settings.theme, BUILTIN_THEMES["dunkel"])
+        self.theme = combine_themes([settings.theme, *settings.theme_mix])
 
         self.profile = QWebEngineProfile("Nexlori", self)
         self.profile.setPersistentStoragePath(str(self.storage_dir))
@@ -249,6 +250,14 @@ class NexloriWindow(QMainWindow):
         tab_row = QHBoxLayout()
         tab_row.setContentsMargins(7, 5, 7, 0)
         tab_row.setSpacing(6)
+        # The tab-opening control stays on the left; the right side contains tabs only.
+        self.new_tab_button = QToolButton(root)
+        self.new_tab_button.setText("+")
+        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
+        self.new_tab_button.setObjectName("newTabButton")
+        self.new_tab_button.clicked.connect(lambda: self.new_tab())
+        tab_row.addWidget(self.new_tab_button)
+
         self.tabs = QTabWidget(root)
         self.tabs.setDocumentMode(True)
         self.tabs.setMovable(True)
@@ -257,13 +266,6 @@ class NexloriWindow(QMainWindow):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self._on_current_changed)
         tab_row.addWidget(self.tabs, 1)
-
-        self.new_tab_button = QToolButton(root)
-        self.new_tab_button.setText("+")
-        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
-        self.new_tab_button.setObjectName("newTabButton")
-        self.new_tab_button.clicked.connect(lambda: self.new_tab())
-        tab_row.addWidget(self.new_tab_button)
         tab_widget = QWidget(root)
         tab_widget.setLayout(tab_row)
         outer.addWidget(tab_widget)
@@ -393,6 +395,7 @@ class NexloriWindow(QMainWindow):
             for name in names:
                 self._add_theme_action(submenu, name)
         self.theme_menu.addSeparator()
+        self.theme_menu.addAction("Themes kombinieren …", self.edit_theme_mix)
         self.theme_menu.addAction("Drei Pride-Favoriten auswählen …", self.edit_pride_favorites)
 
     def _add_theme_action(self, menu: QMenu, name: str) -> None:
@@ -405,6 +408,91 @@ class NexloriWindow(QMainWindow):
         self.theme_action_group.addAction(action)
         self._theme_action_copies.setdefault(name, []).append(action)
         self.theme_actions.setdefault(name, action)
+
+    def edit_theme_mix(self) -> None:
+        """Let the user combine the base theme with up to three additional palettes."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Themes kombinieren')
+        dialog.resize(500, 600)
+        layout = QVBoxLayout(dialog)
+        note = QLabel(
+            'Das aktive Theme bleibt die Basis für Hintergrund und Text. '
+            'Wähle bis zu drei weitere Themes dazu. Alle gewählten Themes erscheinen '
+            'gemeinsam im Farbstreifen; das Basis-Theme sorgt weiter für gut lesbaren Text.',
+            dialog,
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        list_layout = QVBoxLayout(content)
+        checks: dict[str, QCheckBox] = {}
+        base_name = self.settings.theme
+        selected_names = {base_name, *self.settings.theme_mix}
+        count = QLabel('', dialog)
+
+        def update_count() -> None:
+            selected_count = sum(1 for checkbox in checks.values() if checkbox.isChecked())
+            count.setText(f"{selected_count}/4 Themes ausgewählt")
+
+        def changed(checked: bool, own_name: str) -> None:
+            if checked and sum(1 for checkbox in checks.values() if checkbox.isChecked()) > 4:
+                checks[own_name].blockSignals(True)
+                checks[own_name].setChecked(False)
+                checks[own_name].blockSignals(False)
+                QMessageBox.information(
+                    dialog, 'Maximal vier Themes',
+                    'Du kannst die Basis mit höchstens drei weiteren Themes kombinieren.',
+                )
+            update_count()
+
+        for name, theme in BUILTIN_THEMES.items():
+            checkbox = QCheckBox(theme.label, content)
+            checkbox.setChecked(name in selected_names)
+            if name == base_name:
+                checkbox.setEnabled(False)
+                checkbox.setToolTip('Das aktive Theme bleibt die Basis für gut lesbaren Text.')
+            checkbox.toggled.connect(lambda checked, n=name: changed(checked, n))
+            checks[name] = checkbox
+            list_layout.addWidget(checkbox)
+
+        list_layout.addStretch(1)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+        layout.addWidget(count)
+        update_count()
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.settings.theme_mix = [
+            name for name, checkbox in checks.items()
+            if name != self.settings.theme and checkbox.isChecked()
+        ]
+        self.theme = combine_themes([self.settings.theme, *self.settings.theme_mix])
+        self._refresh_page_theme_script()
+        self._apply_browser_theme()
+        for action_name, actions in self._theme_action_copies.items():
+            for action in actions:
+                action.setChecked(action_name == self.settings.theme)
+        self._save_settings()
+        for index in range(self.tabs.count()):
+            view = self.tabs.widget(index)
+            if isinstance(view, QWebEngineView):
+                view.page().setBackgroundColor(self._qt_color(self.theme.bg))
+                self.apply_page_theme(view)
+                if getattr(view, '_nexlori_start', False):
+                    view.setHtml(_start_page(self.theme), QUrl('about:blank'))
+        self.statusBar().showMessage(f"Themes kombiniert: {self.theme.label}", 3500)
 
     def edit_pride_favorites(self) -> None:
         dialog = QDialog(self)
@@ -636,8 +724,9 @@ QLabel {{ background:transparent; }}
     def set_theme(self, name: str) -> None:
         if name not in BUILTIN_THEMES:
             return
-        self.theme = BUILTIN_THEMES[name]
         self.settings.theme = name
+        self.settings.theme_mix = []
+        self.theme = combine_themes([self.settings.theme])
         # Update the profile-level stylesheet too, so pages opened later receive the new theme.
         self._refresh_page_theme_script()
         self._apply_browser_theme()
@@ -1141,7 +1230,7 @@ QLabel {{ background:transparent; }}
         root.addWidget(intro)
 
         form = QFormLayout()
-        theme_css = QCheckBox("Webseiten an das aktive Nexlori-Theme anpassen", dialog)
+        theme_css = QCheckBox("Website-Farbschema unterstützen (Website-CSS bleibt erhalten)", dialog)
         theme_css.setChecked(self.settings.adapt_page_theme)
         ubol = QCheckBox("uBlock Origin Lite aktivieren (Werbung und Tracker blockieren)", dialog)
         ubol.setChecked(self.settings.ubol_enabled)

@@ -16,6 +16,7 @@ from .themes import BUILTIN_THEMES
 @dataclass
 class Settings:
     theme: str = "dunkel"
+    theme_mix: list[str] = field(default_factory=list)  # bis zu drei zusätzliche Themes zur Basis
     mode: str = Mode.NORMAL.value
     saver_level: str = SaverLevel.NORMAL.value
     block_trackers: bool = True
@@ -47,6 +48,15 @@ class Settings:
         out = []
         if self.theme not in BUILTIN_THEMES:
             out.append(f"theme: unbekannt ({self.theme!r})")
+        if not isinstance(self.theme_mix, list) or len(self.theme_mix) > 3:
+            out.append("theme_mix: höchstens drei zusätzliche Themes erwartet")
+        elif (
+            any(not isinstance(name, str) or name not in BUILTIN_THEMES or name == self.theme for name in self.theme_mix)
+            or len([name for name in self.theme_mix if isinstance(name, str)])
+            != len(set(name for name in self.theme_mix if isinstance(name, str)))
+        ):
+            out.append("theme_mix: nur eindeutige, vorhandene Themes zusätzlich zur Basis erlaubt")
+
         if self.mode not in {m.value for m in Mode}:
             out.append(f"mode: unbekannt ({self.mode!r})")
         if self.saver_level not in {s.value for s in SaverLevel}:
