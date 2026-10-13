@@ -31,6 +31,12 @@ def extension_key_from_name(name: str) -> str:
     return normalized[:100] or "unnamed-extension"
 
 
+def is_builtin_extension(name: str) -> bool:
+    """Identify Chromium's built-in PDF/helper extensions so settings never disable them."""
+    key = extension_key_from_name(name)
+    return "pdf-viewer" in key or "chromium-pdf" in key or "hangouts" in key
+
+
 def bundled_ubolite_path() -> Path | None:
     """Find the verified extension bundled by the Windows build workflow."""
     candidates = [
