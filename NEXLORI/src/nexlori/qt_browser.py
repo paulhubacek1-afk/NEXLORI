@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QEventLoop, QPoint, QTimer, QUrl, Qt
+from PySide6.QtCore import QEventLoop, QPoint, QThread, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -36,12 +36,13 @@ from PySide6.QtWebEngineCore import (
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
+from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
 from .core.themes import BUILTIN_THEMES, Theme, page_theme_css
 
 APP_NAME = "Nexlori"
-APP_VERSION = "0.3.0"
+APP_VERSION = __version__
 
 
 def _theme_gradient(theme: Theme) -> str:
@@ -100,6 +101,32 @@ class AddressBar(QLineEdit):
         QTimer.singleShot(0, self.selectAll)
 
 
+class UpdateWorker(QThread):
+    """Runs update network requests away from the browser UI thread."""
+
+    def __init__(self, task: str, *, release: dict | None = None, update_dir: Path | None = None, parent=None):
+        super().__init__(parent)
+        self.task = task
+        self.release = release
+        self.update_dir = update_dir
+        self.result_data: dict = {"task": task}
+
+    def run(self) -> None:
+        try:
+            from .updater import check_for_update, download_verified_update
+            if self.task == "check":
+                self.result_data["release"] = check_for_update(APP_VERSION)
+            elif self.task == "download":
+                if not self.release or self.update_dir is None:
+                    raise RuntimeError("Update-Informationen fehlen.")
+                self.result_data["path"] = str(download_verified_update(self.release, self.update_dir))
+                self.result_data["release"] = self.release
+            else:
+                raise RuntimeError("Unbekannte Update-Aktion.")
+        except Exception as exc:  # noqa: BLE001
+            self.result_data["error"] = str(exc)
+
+
 class BrowserPage(QWebEnginePage):
     def __init__(self, profile: QWebEngineProfile, owner: "NexloriWindow", parent: QWidget):
         super().__init__(profile, parent)
@@ -137,6 +164,9 @@ class NexloriWindow(QMainWindow):
         self.bookmarks = self._load_bookmarks()
         self._closing = False
         self._self_test = self_test
+        self._update_worker: UpdateWorker | None = None
+        self._silent_update_check = True
+        self._spotify_popup = None
         self.theme = BUILTIN_THEMES.get(settings.theme, BUILTIN_THEMES["dunkel"])
 
         self.profile = QWebEngineProfile("Nexlori", self)
@@ -157,6 +187,7 @@ class NexloriWindow(QMainWindow):
         view = self.new_tab(start_page=start_url is None, activate=True)
         if start_url:
             self.navigate_view(view, start_url)
+        QTimer.singleShot(2500, self._start_silent_update_check)
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -213,6 +244,8 @@ class NexloriWindow(QMainWindow):
 
         self.bookmark_button = self._tool("☆", "Lesezeichen hinzufügen/entfernen", self.toggle_bookmark)
         nav.addWidget(self.bookmark_button)
+        self.music_button = self._tool("♫", "Spotify Mini-Player", self.show_spotify_popup)
+        nav.addWidget(self.music_button)
         self.page_theme_button = QToolButton(toolbar)
         self.page_theme_button.setText("Aa")
         self.page_theme_button.setToolTip("Webseite an das aktive Theme anpassen")
@@ -299,9 +332,13 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Lesezeichen", self.show_bookmarks_menu, QKeySequence("Ctrl+Shift+B"))
         self.more_menu.addAction("Verlauf dieser Sitzung", self.show_history_menu)
         self.more_menu.addSeparator()
+        self.more_menu.addAction("Spotify Mini-Player", self.show_spotify_popup, QKeySequence("Ctrl+Shift+M"))
+        self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
+        self.more_menu.addSeparator()
         self.more_menu.addAction("Downloads-Ordner öffnen", self.open_download_folder)
         self.more_menu.addAction("Webseite neu laden", self.reload_current, QKeySequence("F5"))
         self.more_menu.addAction("Theme auswählen", self.show_theme_menu)
+        self.more_menu.addAction("Nach Updates suchen", self.check_for_updates)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Über Nexlori", self.show_about)
         self.more_menu.addAction("Beenden", self.close, QKeySequence("Alt+F4"))
@@ -318,6 +355,8 @@ class NexloriWindow(QMainWindow):
             ("Alt+Home", self.go_home),
             ("Ctrl+F", self.show_find),
             ("Ctrl+D", self.toggle_bookmark),
+            ("Ctrl+Shift+M", self.show_spotify_popup),
+            ("Ctrl+Shift+P", self.show_password_manager),
             ("Ctrl+Plus", lambda: self.change_zoom(0.1)),
             ("Ctrl+Minus", lambda: self.change_zoom(-0.1)),
             ("Ctrl+0", lambda: self.set_zoom(1.0)),
@@ -738,13 +777,109 @@ if (!window.__nexloriThemeObserver) {{
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
+    def show_spotify_popup(self) -> None:
+        try:
+            from .spotify_popup import SpotifyPopup
+            if self._spotify_popup is None:
+                self._spotify_popup = SpotifyPopup(self.profile, self)
+                self._spotify_popup.destroyed.connect(lambda: setattr(self, "_spotify_popup", None))
+            self._spotify_popup.show()
+            self._spotify_popup.raise_()
+            self._spotify_popup.activateWindow()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Spotify Mini-Player", f"Der Mini-Player konnte nicht geöffnet werden: {exc}")
+
+    def show_password_manager(self) -> None:
+        try:
+            from .password_vault_ui import open_password_manager
+            view = self.current_view()
+            site = ""
+            if view:
+                current = view.url()
+                if current.scheme() in {"http", "https"} and current.host():
+                    site = f"{current.scheme()}://{current.host()}"
+            open_password_manager(self, self.settings_path.parent / "password-vault.json", default_site=site)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Passwortmanager", f"Der Passwortmanager konnte nicht geöffnet werden: {exc}")
+
+    def _start_silent_update_check(self) -> None:
+        self._silent_update_check = True
+        self._start_update_worker("check")
+
+    def check_for_updates(self) -> None:
+        self._silent_update_check = False
+        self._start_update_worker("check")
+
+    def _start_update_worker(self, task: str, release: dict | None = None) -> None:
+        if self._update_worker is not None and self._update_worker.isRunning():
+            self.statusBar().showMessage("Ein Update-Vorgang läuft bereits.", 3000)
+            return
+        update_dir = self.settings_path.parent / "updates"
+        worker = UpdateWorker(task, release=release, update_dir=update_dir, parent=self)
+        worker.finished.connect(self._on_update_worker_finished)
+        self._update_worker = worker
+        self.statusBar().showMessage("Suche nach Nexlori-Updates …" if task == "check" else "Update wird heruntergeladen und geprüft …")
+        worker.start()
+
+    def _on_update_worker_finished(self) -> None:
+        worker = self._update_worker
+        if worker is None:
+            return
+        data = dict(worker.result_data)
+        self._update_worker = None
+        worker.deleteLater()
+        if data.get("error"):
+            message = str(data["error"])
+            self.statusBar().showMessage("Update-Vorgang fehlgeschlagen.", 5000)
+            if not self._silent_update_check:
+                QMessageBox.warning(self, "Nexlori-Update", message)
+            return
+        if data.get("task") == "check":
+            release = data.get("release")
+            if not release:
+                self.statusBar().showMessage("Nexlori ist auf dem neuesten veröffentlichten Stand.", 4000)
+                if not self._silent_update_check:
+                    QMessageBox.information(self, "Nexlori-Update", f"Du verwendest Nexlori {APP_VERSION}. Es wurde kein neueres veröffentlichtes Release gefunden.")
+                return
+            notes = str(release.get("body") or "Keine Release-Notizen vorhanden.")
+            details = (
+                f"Version {release['version']} ist verfügbar. Du verwendest Nexlori {APP_VERSION}.\n\n"
+                + notes[:1200]
+                + "\n\nMöchtest du das Update herunterladen und die EXE aktualisieren?"
+            )
+            answer = QMessageBox.question(
+                self, "Nexlori-Update verfügbar", details,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self._start_update_worker("download", release)
+            else:
+                self.statusBar().showMessage(f"Nexlori {release['version']} ist verfügbar.", 5000)
+            return
+        if data.get("task") == "download":
+            release = data.get("release") or {}
+            try:
+                from .updater import start_windows_self_update
+                started = start_windows_self_update(str(data["path"]), str(release.get("url") or "https://github.com/paulhubacek1-afk/NEXLORI/releases"))
+            except Exception as exc:  # noqa: BLE001
+                QMessageBox.warning(self, "Nexlori-Update", f"Der Download wurde geprüft, aber der Updater konnte nicht gestartet werden: {exc}")
+                return
+            if not started:
+                QDesktopServices.openUrl(QUrl(str(release.get("url") or "https://github.com/paulhubacek1-afk/NEXLORI/releases")))
+                QMessageBox.information(self, "Nexlori-Update", "Das Update wurde heruntergeladen und die Prüfsumme stimmt. Starte die Release-Seite, damit du die Windows-Version manuell installieren kannst.")
+                return
+            QMessageBox.information(self, "Nexlori-Update", "Update verifiziert. Nexlori wird geschlossen, aktualisiert und anschließend neu gestartet.")
+            self.close()
+            QApplication.quit()
+
     def show_about(self) -> None:
         QMessageBox.about(
             self,
             "Über Nexlori",
-            "<h3>Nexlori</h3><p>Dein Web. Dein Look.</p>"
-            "<p>Chromium-WebEngine für moderne Websites, mit lokalen Themes und ohne Nexlori-Telemetrie.</p>"
-            "<p>Die Darstellung einer Website kann durch das optionale Theme-CSS verändert werden.</p>",
+            f"<h3>Nexlori {APP_VERSION}</h3><p>Dein Web. Dein Look.</p>"
+            "<p>Chromium-WebEngine für moderne Websites, mit lokalen Themes, Spotify Mini-Player und einem verschlüsselten Passwortmanager.</p>"
+            "<p>Updates werden von GitHub Releases bezogen und vor dem Ersetzen der EXE per SHA-256 geprüft.</p>",
         )
 
     def _save_settings(self) -> None:
