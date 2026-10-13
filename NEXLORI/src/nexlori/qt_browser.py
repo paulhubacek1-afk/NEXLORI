@@ -648,41 +648,33 @@ QLabel {{ background:transparent; }}
         return QColor(value)
 
     def _build_page_theme_script(self, enabled: bool) -> str:
-        css = page_theme_css(self.theme)
-        css_literal = json.dumps(css)
-        return f"""(() => {{
-const id = 'nexlori-theme-user-style';
-window.__nexloriThemeConfig = {{enabled:{str(enabled).lower()}, css:{css_literal}}};
-const remove = () => {{ const old = document.getElementById(id); if (old) old.remove(); }};
-const ensure = () => {{
-  const config = window.__nexloriThemeConfig;
-  if (!document.documentElement) return;
-  if (!config.enabled) {{ remove(); return; }}
-  let style = document.getElementById(id);
-  if (!style) {{
-    style = document.createElement('style');
-    style.id = id;
-    (document.head || document.documentElement).appendChild(style);
-  }}
-  if (style.textContent !== config.css) style.textContent = config.css;
-}};
-ensure();
-if (!window.__nexloriThemeObserver) {{
-  const observer = new MutationObserver(() => {{
-    const config = window.__nexloriThemeConfig;
-    if (config && config.enabled && !document.getElementById(id)) ensure();
-  }});
-  if (document.documentElement) observer.observe(document.documentElement, {{childList:true, subtree:true}});
-  window.__nexloriThemeObserver = observer;
-}}
-}})();"""
+        return build_page_theme_script(self.theme, enabled)
+
+    def _refresh_page_theme_script(self) -> None:
+        """Apply the selected stylesheet automatically to each newly created page document."""
+        scripts = self.profile.scripts()
+        if self._page_theme_script is not None:
+            try:
+                scripts.remove(self._page_theme_script)
+            except (RuntimeError, TypeError):
+                pass
+        script = QWebEngineScript()
+        script.setName("NexloriWebsiteTheme")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setRunsOnSubFrames(False)
+        script.setSourceCode(self._build_page_theme_script(self.settings.adapt_page_theme))
+        scripts.insert(script)
+        self._page_theme_script = script
 
     def apply_page_theme(self, view: QWebEngineView) -> None:
-        # An injected user stylesheet changes colours; Qt WebEngine continues to run the original website.
+        # The current page gets updated immediately; profile-level DocumentReady injection
+        # applies the same stylesheet on future navigations as well.
         view.page().runJavaScript(self._build_page_theme_script(self.settings.adapt_page_theme))
 
     def toggle_page_theme(self, enabled: bool) -> None:
         self.settings.adapt_page_theme = bool(enabled)
+        self._refresh_page_theme_script()
         self._save_settings()
         self.page_theme_button.setToolTip(
             "Webseiten-Theme ist an" if enabled else "Webseiten-Theme ist aus"
