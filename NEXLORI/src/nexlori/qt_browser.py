@@ -409,6 +409,91 @@ class NexloriWindow(QMainWindow):
         self._theme_action_copies.setdefault(name, []).append(action)
         self.theme_actions.setdefault(name, action)
 
+    def edit_theme_mix(self) -> None:
+        """Let the user combine the base theme with up to three additional palettes."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Themes kombinieren')
+        dialog.resize(500, 600)
+        layout = QVBoxLayout(dialog)
+        note = QLabel(
+            'Das aktive Theme bleibt die Basis für Hintergrund und Text. '
+            'Wähle bis zu drei weitere Themes dazu. Alle gewählten Themes erscheinen '
+            'gemeinsam im Farbstreifen; das Basis-Theme sorgt weiter für gut lesbaren Text.',
+            dialog,
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        content = QWidget(scroll)
+        list_layout = QVBoxLayout(content)
+        checks: dict[str, QCheckBox] = {}
+        base_name = self.settings.theme
+        selected_names = {base_name, *self.settings.theme_mix}
+        count = QLabel('', dialog)
+
+        def update_count() -> None:
+            selected_count = sum(1 for checkbox in checks.values() if checkbox.isChecked())
+            count.setText(f"{selected_count}/4 Themes ausgewählt")
+
+        def changed(checked: bool, own_name: str) -> None:
+            if checked and sum(1 for checkbox in checks.values() if checkbox.isChecked()) > 4:
+                checks[own_name].blockSignals(True)
+                checks[own_name].setChecked(False)
+                checks[own_name].blockSignals(False)
+                QMessageBox.information(
+                    dialog, 'Maximal vier Themes',
+                    'Du kannst die Basis mit höchstens drei weiteren Themes kombinieren.',
+                )
+            update_count()
+
+        for name, theme in BUILTIN_THEMES.items():
+            checkbox = QCheckBox(theme.label, content)
+            checkbox.setChecked(name in selected_names)
+            if name == base_name:
+                checkbox.setEnabled(False)
+                checkbox.setToolTip('Das aktive Theme bleibt die Basis für gut lesbaren Text.')
+            checkbox.toggled.connect(lambda checked, n=name: changed(checked, n))
+            checks[name] = checkbox
+            list_layout.addWidget(checkbox)
+
+        list_layout.addStretch(1)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+        layout.addWidget(count)
+        update_count()
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.settings.theme_mix = [
+            name for name, checkbox in checks.items()
+            if name != self.settings.theme and checkbox.isChecked()
+        ]
+        self.theme = combine_themes([self.settings.theme, *self.settings.theme_mix])
+        self._refresh_page_theme_script()
+        self._apply_browser_theme()
+        for action_name, actions in self._theme_action_copies.items():
+            for action in actions:
+                action.setChecked(action_name == self.settings.theme)
+        self._save_settings()
+        for index in range(self.tabs.count()):
+            view = self.tabs.widget(index)
+            if isinstance(view, QWebEngineView):
+                view.page().setBackgroundColor(self._qt_color(self.theme.bg))
+                self.apply_page_theme(view)
+                if getattr(view, '_nexlori_start', False):
+                    view.setHtml(_start_page(self.theme), QUrl('about:blank'))
+        self.statusBar().showMessage(f"Themes kombiniert: {self.theme.label}", 3500)
+
     def edit_pride_favorites(self) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Deine drei Pride-Favoriten")
