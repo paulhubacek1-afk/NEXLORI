@@ -92,7 +92,7 @@ Stand: **Nexlori 0.5.0**. Die Windows-Anwendung nutzt Qt WebEngine/Chromium für
 
 Der Workflow **Windows-EXE** testet den Quellcode, baut die portable Anwendung, startet den EXE-Selbsttest und erstellt ein Installationsprogramm:
 
-- **Installer (empfohlen):** `Nexlori-Setup.exe` installiert Nexlori für den aktuellen Windows-Benutzer und erstellt ein Desktop-Symbol sowie einen Eintrag im Startmenü. Das Symbol verwendet das eingebaute Nexlori-Icon.
+- **Installer (empfohlen):** `Nexlori-Setup.exe` installiert Nexlori für den aktuellen Windows-Benutzer und erstellt standardmäßig ein Desktop-Symbol sowie einen Eintrag im Startmenü. Beide verwenden das eingebaute Nexlori-Icon.
 - **Portable Version:** `Nexlori.exe` kann direkt aus einem beliebigen Ordner gestartet werden.
 - **Prüfsumme:** `Nexlori.exe.sha256` ermöglicht die SHA-256-Prüfung der portablen EXE.
 
@@ -106,7 +106,7 @@ Die EXE ist nicht digital signiert. Windows kann deshalb beim ersten Start eine 
 |---|---|
 | Browserleiste | Zentrierte, abgerundete Adress-/Suchleiste, in der Breite einstellbar; Icon-Größe und sichtbare Schnellzugriffe anpassbar; Suchmaschine wählbar |
 | Tabs und Web | Tabs, Zurück/Vorwärts, Neu laden, Startseite, Lesezeichen, Verlauf, Seitensuche, Zoom und Download-Dialog auf Basis von Chromium |
-| Themes | Basis-, Gothic-, Cyberpunk-, Wald-, Ozean-, Sakura-, Kaffee- und Mitternacht-Themes plus eine umfangreiche Sammlung von Pride-Flaggen. Drei Pride-Favoriten sind direkt auswählbar. |
+| Themes | Basis-, Gothic-, Cyberpunk-, Wald-, Ozean-, Sakura-, Kaffee- und Mitternacht-Themes plus 60 Pride-Farbwelten für häufige Flaggen aus Gender-, Sexualitäts-, Romantik- und Ace-Spektrum. Drei Pride-Favoriten sind direkt auswählbar. |
 | Website-Farben | Der optionale Schalter „Aa“ wendet das vorhandene lokale Theme-CSS an. Webseiten können durch eigene Styles begrenzt werden; Bilder und Videos werden nicht pauschal umgefärbt. |
 | Spotify | Abtrennbarer Mini-Player mit Spotify-Weboberfläche und Link-Eingabe. Anmeldung und Wiedergabe richten sich nach Spotify und dem jeweiligen Konto. |
 | Passwortmanager | Lokaler verschlüsselter Tresor mit Master-Passphrase, Passwortgenerator, Kopieren und Löschen. Zugangsdaten werden nicht in Klartext gespeichert. Automatisches Einfügen in Websites ist noch nicht aktiviert. |
