@@ -77,56 +77,17 @@ def accessibility_issues(theme: Theme) -> list[str]:
 
 
 def page_theme_css(theme: Theme) -> str:
-    """Locally recolour a webpage without filtering images, video or the site's layout."""
-    light = theme.name in {"hell", "ruhig"}
-    scheme = "light" if light else "dark"
+    """Expose Nexlori colours without overriding a website's own CSS or layout."""
+    scheme = "light" if relative_luminance(theme.bg) >= 0.5 else "dark"
     return f"""
 :root {{
-  color-scheme: {scheme} !important;
+  color-scheme: {scheme};
   --nexlori-page-bg: {theme.bg};
   --nexlori-page-surface: {theme.surface};
   --nexlori-page-text: {theme.fg};
   --nexlori-page-accent: {theme.accent};
 }}
-html, body {{
-  background-color: var(--nexlori-page-bg) !important;
-  color: var(--nexlori-page-text) !important;
-}}
-/* Apply the active text and border palette broadly while preserving media and vector icons. */
-*:not(img):not(video):not(audio):not(canvas):not(svg):not(path):not(iframe):not(picture):not(source) {{
-  color: var(--nexlori-page-text) !important;
-  border-color: var(--nexlori-page-accent) !important;
-}}
-/* Recolour common solid page surfaces without replacing background images or gradients. */
-main, article, section, aside, nav, header, footer, table, thead, tbody, tfoot, tr, td, th,
-form, fieldset, dialog, details, [role="main"], [role="navigation"], [role="banner"],
-[role="contentinfo"], [role="dialog"], [role="region"], [class*="card" i], [class*="panel" i],
-[class*="modal" i], [class*="surface" i] {{
-  background-color: var(--nexlori-page-surface) !important;
-}}
-a, a:visited, [role="link"] {{
-  color: var(--nexlori-page-accent) !important;
-}}
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-textarea, select, option {{
-  background-color: var(--nexlori-page-surface) !important;
-  color: var(--nexlori-page-text) !important;
-  border-color: var(--nexlori-page-accent) !important;
-}}
-button, [role="button"], input[type="button"], input[type="submit"] {{
-  color: var(--nexlori-page-text) !important;
-  border-color: var(--nexlori-page-accent) !important;
-}}
-::selection {{
-  background: var(--nexlori-page-accent) !important;
-  color: var(--nexlori-page-bg) !important;
-}}
-::-webkit-scrollbar-thumb {{
-  background: var(--nexlori-page-accent) !important;
-}}
-/* Images, video, canvas and site layout are left untouched. */
 """
-
 
 def _pride(name: str, label: str, accent: str, stripes: tuple[str, ...]) -> Theme:
     return Theme(name, label, "#15131A", "#221F2B", "#F3F1F7", accent, stripes)
@@ -268,6 +229,42 @@ _THEMES = [
           ("#38251B", "#885B37", "#E5B77C")),
 ]
 BUILTIN_THEMES: dict[str, Theme] = {t.name: t for t in _THEMES}
+
+
+def combine_themes(names: list[str] | tuple[str, ...]) -> Theme:
+    """Combine up to four themes while keeping the first theme's readable base palette.
+
+    The base theme supplies the background, surfaces, text and primary accent.
+    Every selected theme contributes its flag colours to the top gradient.
+    """
+    selected_names = list(dict.fromkeys(names))
+    if not selected_names:
+        selected_names = ["dunkel"]
+    if len(selected_names) > 4:
+        raise ValueError("Es können höchstens vier Themes kombiniert werden.")
+    unknown = [name for name in selected_names if name not in BUILTIN_THEMES]
+    if unknown:
+        raise ValueError("Unbekannte Themes: " + ", ".join(unknown))
+
+    selected = [BUILTIN_THEMES[name] for name in selected_names]
+    if len(selected) == 1:
+        return selected[0]
+
+    palette = tuple(
+        color
+        for theme in selected
+        for color in (theme.stripes or (theme.accent,))
+    )
+    base = selected[0]
+    return Theme(
+        name="theme-mix",
+        label="Kombi: " + " + ".join(theme.label for theme in selected),
+        bg=base.bg,
+        surface=base.surface,
+        fg=base.fg,
+        accent=base.accent,
+        stripes=palette,
+    )
 
 
 def custom_theme(name: str, bg: str, surface: str, fg: str, accent: str, label: str | None = None) -> Theme:
