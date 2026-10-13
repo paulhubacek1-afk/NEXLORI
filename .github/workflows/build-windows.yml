@@ -19,12 +19,33 @@ jobs:
     name: Build and test Nexlori plus Windows installer
     runs-on: windows-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     defaults:
       run:
         working-directory: NEXLORI
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v4
+
+      - name: Automatische Build-Version festlegen
+        id: version
+        shell: pwsh
+        run: |
+          $match = Select-String -Path "pyproject.toml" -Pattern '^version = "([^"]+)"'
+          if (-not $match) { throw "Programmversion aus pyproject.toml konnte nicht gelesen werden." }
+          $version = $match.Matches[0].Groups[1].Value
+          if ($env:GITHUB_EVENT_NAME -eq "push" -and $env:GITHUB_REF -eq "refs/heads/main") {
+            $version = "$version-build.$env:GITHUB_RUN_NUMBER"
+          } elseif ($env:GITHUB_REF.StartsWith("refs/tags/v")) {
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+          }
+          $initPath = "src/nexlori/__init__.py"
+          $source = Get-Content $initPath -Raw
+          $source = [regex]::Replace($source, '__version__ = "[^"]+"', "__version__ = `"$version`"")
+          [System.IO.File]::WriteAllText((Resolve-Path $initPath), $source, [System.Text.UTF8Encoding]::new($false))
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Build version: $version"
 
       - name: Python einrichten
         uses: actions/setup-python@v5
@@ -82,6 +103,8 @@ jobs:
 
       - name: Installationsprogramm mit Desktop-Shortcut bauen
         shell: pwsh
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
         run: |
           $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
           $programFiles = [Environment]::GetFolderPath('ProgramFiles')
@@ -92,10 +115,7 @@ jobs:
           if (-not (Test-Path $compiler)) {
             throw "Inno Setup Compiler wurde nicht gefunden."
           }
-          $match = Select-String -Path "pyproject.toml" -Pattern '^version = "([^"]+)"'
-          if (-not $match) { throw "Programmversion aus pyproject.toml konnte nicht gelesen werden." }
-          $version = $match.Matches[0].Groups[1].Value
-          & $compiler "/DMyAppVersion=$version" "packaging\Nexlori.iss"
+          & $compiler "/DMyAppVersion=$env:BUILD_VERSION" "packaging\Nexlori.iss"
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup ist mit Code $LASTEXITCODE fehlgeschlagen." }
           if (-not (Test-Path "dist\Nexlori-Setup.exe")) { throw "Nexlori-Setup.exe wurde nicht erstellt." }
 
@@ -138,13 +158,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if ($env:GITHUB_REF.StartsWith("refs/tags/v")) {
-            $tag = $env:GITHUB_REF_NAME
-          } else {
-            $match = Select-String -Path "NEXLORI/pyproject.toml" -Pattern '^version = "([^"]+)"'
-            if (-not $match) { throw "Programmversion aus pyproject.toml konnte nicht gelesen werden." }
-            $tag = "v" + $match.Matches[0].Groups[1].Value
-          }
+          $tag = "v" + "${{ needs.build.outputs.version }}"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --clobber
