@@ -1,6 +1,6 @@
 # NEXLORI
 
-Nexlori ist ein experimenteller Browser-Prototyp mit einer eigenen, kleinen HTML/CSS-Rendering-Engine, Tabs, Themes und ressourcenschonenden Modi.
+Nexlori ist ein Browser-Prototyp mit Chromium-WebEngine, Tabs, Lesezeichen, Downloads und anpassbaren Themes. Der frühere eigene HTML/CSS-Renderer bleibt für Lern- und Render-Tests erhalten.
 
 **Der eigentliche Python-Prototyp liegt im Ordner [NEXLORI/](NEXLORI/).** Die ausführliche Dokumentation, Kompatibilitätsübersicht und Entwicklungsanleitung befinden sich in [NEXLORI/README.md](NEXLORI/README.md).
 
@@ -15,6 +15,6 @@ Der Build läuft bei Änderungen am Hauptprojekt, vor dem Zusammenführen eines 
 
 ## Wichtiger Hinweis
 
-Nexlori ist noch **kein vollwertiger Alltagsbrowser**. Der eigene Renderer unterstützt derzeit nur einen Teil von HTML und CSS und führt kein JavaScript aus. Moderne Webseiten können deshalb unvollständig oder gar nicht funktionieren. Bitte verwende diese Entwicklungsfassung nicht für Online-Banking oder andere sensible Seiten.
+Nexlori nutzt nun Chromium-WebEngine, daher funktionieren die meisten modernen Websites mit JavaScript, CSS, Bildern und Formularen. Einzelne Dienste können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren. Die Version bleibt ein Entwicklungsstand; verwende sie nicht für Online-Banking oder andere sensible Seiten.
 
 Siehe [Funktionsstand und Einschränkungen](NEXLORI/README.md) für Details.
