@@ -52,6 +52,7 @@ from .core.settings import Settings, default_settings_path
 from .core.themes import BUILTIN_THEMES, Theme
 from .extension_utils import (
     bundled_ubolite_path,
+    unpack_extension_package,
     extension_key_from_info,
     extension_key_from_name,
     extension_name_from_info,
@@ -1034,8 +1035,13 @@ QLabel {{ background:transparent; }}
             )
             return
         try:
+            # Qt WebEngine's extension API accepts an unpacked extension directory,
+            # not the ZIP archive bundled with Nexlori. Unpack the already verified
+            # archive into the persistent profile before calling the native API.
+            extension_dir = self.storage_dir / "extensions" / "ublock-origin-lite"
+            unpacked = unpack_extension_package(package, extension_dir)
             self.statusBar().showMessage("uBlock Origin Lite wird zum ersten Mal eingerichtet …", 6000)
-            self.extension_manager.installExtension(str(package))
+            self.extension_manager.installExtension(str(unpacked))
         except Exception as exc:  # noqa: BLE001
             self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
 
