@@ -137,7 +137,7 @@ def test_save_load_roundtrip_and_missing_file(tmp_path):
     assert not list(path.parent.glob("*.tmp"))
 
 
-def test_toolbar_and_three_pride_favourites_are_validated_and_persisted():
+def test_toolbar_and_three_pride_favourites_are_validated_and_persisted(tmp_path):
     s = Settings()
     assert len(s.pride_favorites) == 3
     assert s.toolbar_search_width == 560
@@ -149,7 +149,7 @@ def test_toolbar_and_three_pride_favourites_are_validated_and_persisted():
         Settings.from_dict({"toolbar_search_width": 100})
     with pytest.raises(ValueError, match="toolbar_visible_icons"):
         Settings.from_dict({"toolbar_visible_icons": ["bookmark", "bookmark"]})
-    path = pytest.importorskip("pathlib").Path("settings-test.json")
+    path = tmp_path / "settings-test.json"
     s.toolbar_search_width = 720
     s.toolbar_icon_size = 22
     s.toolbar_visible_icons = ["spotify", "theme"]
