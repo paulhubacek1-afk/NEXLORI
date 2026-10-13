@@ -38,56 +38,10 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
-from .core.themes import BUILTIN_THEMES, Theme
+from .core.themes import BUILTIN_THEMES, Theme, page_theme_css
 
 APP_NAME = "Nexlori"
 APP_VERSION = "0.3.0"
-
-
-def page_theme_css(theme: Theme) -> str:
-    """A gentle user stylesheet: recolours text, surfaces and controls without hiding page content."""
-    light = theme.name in {"hell", "ruhig"}
-    scheme = "light" if light else "dark"
-    return f"""
-:root {{
-  color-scheme: {scheme} !important;
-  --nexlori-page-bg: {theme.bg};
-  --nexlori-page-surface: {theme.surface};
-  --nexlori-page-text: {theme.fg};
-  --nexlori-page-accent: {theme.accent};
-}}
-html, body {{
-  background-color: var(--nexlori-page-bg) !important;
-  color: var(--nexlori-page-text) !important;
-}}
-body, main, article, section, aside, nav, header, footer {{
-  color: var(--nexlori-page-text) !important;
-}}
-h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, legend, blockquote, figcaption, summary {{
-  color: var(--nexlori-page-text) !important;
-}}
-a, a:visited, [role="link"] {{
-  color: var(--nexlori-page-accent) !important;
-}}
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-textarea, select, option {{
-  background-color: var(--nexlori-page-surface) !important;
-  color: var(--nexlori-page-text) !important;
-  border-color: var(--nexlori-page-accent) !important;
-}}
-button, [role="button"], input[type="button"], input[type="submit"] {{
-  color: var(--nexlori-page-text) !important;
-  border-color: var(--nexlori-page-accent) !important;
-}}
-::selection {{
-  background: var(--nexlori-page-accent) !important;
-  color: var(--nexlori-page-bg) !important;
-}}
-::-webkit-scrollbar-thumb {{
-  background: var(--nexlori-page-accent) !important;
-}}
-/* Images, video, canvas and site layout are left untouched. */
-"""
 
 
 def _theme_gradient(theme: Theme) -> str:
