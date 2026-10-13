@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 import ipaddress
 import re
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 
 import hashlib
@@ -165,6 +165,7 @@ footer {{ margin-top:28px; opacity:.55; font-size:12px; }}
 def error_page_html(theme, kind: str, url: str, detail: str = "") -> str:
     """Distinct, privacy-friendly error pages; offline mode includes a tiny offline game."""
     target = html.escape(url, quote=True)
+    encoded_target = quote(url, safe="")
     detail_html = f"<p class='muted'>{html.escape(detail[:320])}</p>" if detail else ""
     pages = {
         "offline": ("Keine Verbindung", "Du bist offline", "Nexlori erreicht das Internet gerade nicht. Deine offenen Tabs bleiben erhalten."),
@@ -211,7 +212,7 @@ def error_page_html(theme, kind: str, url: str, detail: str = "") -> str:
 </script>"""
     body = f"""<span class="eyebrow">Nexlori · {html.escape(title)}</span><h1>{html.escape(heading)}</h1>
 <p>{html.escape(desc)}</p>{detail_html}<div class="card"><div class="muted">Adresse</div><strong>{target}</strong></div>
-<a class="button" href="nexlori://browser/retry?url={target}">Erneut versuchen</a>
+<a class="button" href="nexlori://browser/retry?url={encoded_target}">Erneut versuchen</a>
 <a class="button secondary" href="nexlori://browser/home">Zur Startseite</a>{game}"""
     return _shell(theme, title, body)
 
