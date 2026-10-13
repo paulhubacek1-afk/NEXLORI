@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexlori"
-version = "0.3.0"
+version = "0.4.0"
 description = "Nexlori – experimenteller Prototyp (eigener Rendering-Kern und Browser-Logik)"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["Pillow>=10.1", "PySide6>=6.8,<7"]
+dependencies = ["Pillow>=10.1", "PySide6>=6.8,<7", "cryptography>=42.0"]
 
 [project.optional-dependencies]
 gaming = ["psutil>=5.9"]
