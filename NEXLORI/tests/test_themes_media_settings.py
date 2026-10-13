@@ -29,6 +29,18 @@ def test_pride_themes_are_present_with_flag_stripes():
     assert all(len(t.stripes) >= 3 for t in pride)
     assert len(BUILTIN_THEMES["pride-regenbogen"].stripes) == 6
 
+def test_pride_collection_includes_a_broad_range_of_identity_flags():
+    pride = [t for t in BUILTIN_THEMES.values() if t.name.startswith("pride-")]
+    assert len(pride) >= 35
+    expected = {
+        "pride-progress", "pride-intersex-progress", "pride-gay", "pride-mlm",
+        "pride-trans", "pride-transmasc", "pride-transfem", "pride-genderfluid",
+        "pride-genderqueer", "pride-agender", "pride-demiboy", "pride-demigirl",
+        "pride-asexuell", "pride-aromantisch", "pride-aroace", "pride-polyamorie",
+        "pride-sapphic", "pride-achillean", "pride-bear", "pride-ally",
+    }
+    assert expected <= set(BUILTIN_THEMES)
+
 
 def test_custom_theme_rejects_low_contrast_and_bad_input():
     assert custom_theme("meins", "#101010", "#202020", "#F0F0F0", "#66CCFF").accent == "#66CCFF"
@@ -123,6 +135,32 @@ def test_save_load_roundtrip_and_missing_file(tmp_path):
     s.save(path)
     assert Settings.load(path) == s
     assert not list(path.parent.glob("*.tmp"))
+
+
+def test_toolbar_and_three_pride_favourites_are_validated_and_persisted():
+    s = Settings()
+    assert len(s.pride_favorites) == 3
+    assert s.toolbar_search_width == 560
+    assert s.toolbar_icon_size == 18
+    assert s.problems() == []
+    with pytest.raises(ValueError, match="höchstens drei"):
+        Settings.from_dict({"pride_favorites": ["pride-gay", "pride-trans", "pride-bi", "pride-pan"]})
+    with pytest.raises(ValueError, match="toolbar_search_width"):
+        Settings.from_dict({"toolbar_search_width": 100})
+    with pytest.raises(ValueError, match="toolbar_visible_icons"):
+        Settings.from_dict({"toolbar_visible_icons": ["bookmark", "bookmark"]})
+    path = pytest.importorskip("pathlib").Path("settings-test.json")
+    s.toolbar_search_width = 720
+    s.toolbar_icon_size = 22
+    s.toolbar_visible_icons = ["spotify", "theme"]
+    s.pride_favorites = ["pride-gay", "pride-progress", "pride-trans"]
+    s.save(path)
+    loaded = Settings.load(path)
+    assert loaded.toolbar_search_width == 720
+    assert loaded.toolbar_icon_size == 22
+    assert loaded.toolbar_visible_icons == ["spotify", "theme"]
+    assert loaded.pride_favorites == ["pride-gay", "pride-progress", "pride-trans"]
+    path.unlink(missing_ok=True)
 
 
 def test_invalid_values_are_rejected_and_unknown_keys_ignored():
