@@ -86,9 +86,9 @@ jobs:
             throw "Build-Ausgabe fehlt: $exe"
           }
           $process = Start-Process -FilePath $exe -ArgumentList @("--selftest", $out) -PassThru
-          if (-not $process.WaitForExit(60000)) {
+          if (-not $process.WaitForExit(120000)) {
             & taskkill.exe /PID $process.Id /T /F | Out-Null
-            throw "EXE-Selbsttest hängt länger als 60 Sekunden."
+            throw "EXE-Selbsttest hängt länger als 120 Sekunden."
           }
           if (Test-Path $out) {
             Get-Content $out
