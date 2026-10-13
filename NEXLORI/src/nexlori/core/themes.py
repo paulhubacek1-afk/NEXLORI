@@ -250,6 +250,8 @@ _THEMES = [
            ("#FFFFFF", "#BBA1F8", "#68DDB2", "#BBA1F8", "#FFFFFF")),
     _pride("pride-neuroqueer", "Pride – Neuroqueer", "#BBA1F8",
            ("#F7A8D8", "#BBA1F8", "#68DDB2", "#F6D75D", "#9CCBFF")),
+    _pride("pride-quoiromantic", "Pride – Quoiromantisch", "#F6D75D",
+           ("#ECA95A", "#F6D75D", "#FFFFFF", "#7A7A7A", "#000000")),
     Theme("gothic", "Gothic", "#100C14", "#211927", "#F4EAF6", "#E29BCE",
           ("#151018", "#4D2D58", "#A55A97", "#D8A8CE")),
     Theme("cyberpunk", "Cyberpunk", "#100A24", "#211743", "#F8F0FF", "#F72585",
