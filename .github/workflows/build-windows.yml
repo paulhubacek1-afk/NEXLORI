@@ -174,9 +174,9 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --clobber
           } else {
-            if ($tag -match "-build\\.") {
+            if ($tag -match '-build\.') {
               gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes --prerelease
             } else {
-              gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --title "Nexlori $tag" --generate-notes
+              gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes
             }
           }
