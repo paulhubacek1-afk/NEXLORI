@@ -1,0 +1,110 @@
+name: Windows-EXE
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "NEXLORI/**"
+      - ".github/workflows/build-windows.yml"
+      - ".github/workflows/tests.yml"
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test Nexlori.exe
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: NEXLORI
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: NEXLORI/pyproject.toml
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,gaming]" pyinstaller
+
+      - name: Tests ausführen
+        run: python -m pytest -q
+
+      - name: App-Icon erzeugen
+        run: python packaging/make_icon.py
+
+      - name: Windows-EXE bauen
+        run: python packaging/build_exe.py
+
+      - name: Gebaute EXE starten und prüfen
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "dist\Nexlori.exe"
+          $out = Join-Path $PWD "selftest.txt"
+          if (-not (Test-Path $exe)) {
+            throw "Build-Ausgabe fehlt: $exe"
+          }
+          $process = Start-Process -FilePath $exe -ArgumentList @("--selftest", $out) -Wait -PassThru
+          if (Test-Path $out) {
+            Get-Content $out
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Selbsttest der EXE fehlgeschlagen (Exit-Code $($process.ExitCode))"
+          }
+          if (-not (Test-Path $out)) {
+            throw "Die EXE hat keine Selbsttest-Datei geschrieben."
+          }
+
+      - name: SHA-256-Prüfsumme erzeugen
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "dist\Nexlori.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Nexlori.exe" | Out-File -Encoding ascii "dist\Nexlori.exe.sha256"
+          Get-Content "dist\Nexlori.exe.sha256"
+
+      - name: EXE als herunterladbares Artefakt speichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nexlori-Windows-x64
+          path: |
+            NEXLORI/dist/Nexlori.exe
+            NEXLORI/dist/Nexlori.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: GitHub-Release veröffentlichen
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Build-Artefakt herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: Nexlori-Windows-x64
+          path: dist
+
+      - name: Release mit EXE anlegen oder aktualisieren
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 --clobber
+          } else {
+            gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 --title "Nexlori $tag" --generate-notes --prerelease
+          }
