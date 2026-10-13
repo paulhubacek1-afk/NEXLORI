@@ -76,6 +76,52 @@ def accessibility_issues(theme: Theme) -> list[str]:
     return issues
 
 
+def page_theme_css(theme: Theme) -> str:
+    """Locally recolour a webpage without filtering images, video or the site's layout."""
+    light = theme.name in {"hell", "ruhig"}
+    scheme = "light" if light else "dark"
+    return f"""
+:root {{
+  color-scheme: {scheme} !important;
+  --nexlori-page-bg: {theme.bg};
+  --nexlori-page-surface: {theme.surface};
+  --nexlori-page-text: {theme.fg};
+  --nexlori-page-accent: {theme.accent};
+}}
+html, body {{
+  background-color: var(--nexlori-page-bg) !important;
+  color: var(--nexlori-page-text) !important;
+}}
+body, main, article, section, aside, nav, header, footer {{
+  color: var(--nexlori-page-text) !important;
+}}
+h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, legend, blockquote, figcaption, summary {{
+  color: var(--nexlori-page-text) !important;
+}}
+a, a:visited, [role="link"] {{
+  color: var(--nexlori-page-accent) !important;
+}}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea, select, option {{
+  background-color: var(--nexlori-page-surface) !important;
+  color: var(--nexlori-page-text) !important;
+  border-color: var(--nexlori-page-accent) !important;
+}}
+button, [role="button"], input[type="button"], input[type="submit"] {{
+  color: var(--nexlori-page-text) !important;
+  border-color: var(--nexlori-page-accent) !important;
+}}
+::selection {{
+  background: var(--nexlori-page-accent) !important;
+  color: var(--nexlori-page-bg) !important;
+}}
+::-webkit-scrollbar-thumb {{
+  background: var(--nexlori-page-accent) !important;
+}}
+/* Images, video, canvas and site layout are left untouched. */
+"""
+
+
 def _pride(name: str, label: str, accent: str, stripes: tuple[str, ...]) -> Theme:
     return Theme(name, label, "#15131A", "#221F2B", "#F3F1F7", accent, stripes)
 
