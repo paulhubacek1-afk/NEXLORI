@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -138,8 +139,12 @@ def download_verified_update(release: dict[str, Any], destination_dir: str | Pat
         expected = match.group(1).lower()
         downloaded = temp_dir / "Nexlori.exe"
         _download(str(exe_url), downloaded)
-        actual = hashlib.sha256(downloaded.read_bytes()).hexdigest()
-        if not hashlib.compare_digest(actual, expected):
+        digest = hashlib.sha256()
+        with downloaded.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual = digest.hexdigest()
+        if not hmac.compare_digest(actual, expected):
             raise UpdateError("Die Prüfsumme passt nicht zur EXE. Das Update wurde verworfen.")
         staged = destination / "Nexlori.exe.pending"
         staged.unlink(missing_ok=True)
