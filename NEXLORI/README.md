@@ -86,9 +86,7 @@ Nexlori soll ein Browser sein, in dem Menschen ihre Persönlichkeit zeigen könn
 
 ## Projektstand der Umsetzung
 
-Stand: **Prototyp 0.2.0** – jetzt als Windows-Programm (`Nexlori.exe`). Es ist ein **Entwicklungsstand zum
-Ausprobieren, kein Alltagsbrowser**: Nexlori zeigt HTML und einfaches CSS, führt aber **kein JavaScript** aus und
-lädt **keine Bilder**. Viele moderne Webseiten sehen deshalb anders aus oder funktionieren nicht.
+Stand: **Prototyp 0.3.0** – die Browser-Oberfläche nutzt jetzt Qt WebEngine/Chromium. Damit funktionieren die meisten modernen Webseiten deutlich vollständiger als mit dem alten eigenen Renderer. Eine Garantie für jede Website gibt es trotzdem nicht: Einige Dienste benötigen spezielle DRM-Komponenten, besondere Systemfunktionen oder blockieren eingebettete Browser.
 
 ![Nexlori-Fenster mit Trans-Theme (Screenshot aus der Testumgebung)](docs/screenshot.png)
 
@@ -111,14 +109,14 @@ gelegentlich Fehlalarme. Mit `Nexlori.exe.sha256` lässt sich die Datei prüfen.
 
 | Bereich | Heute vorhanden | Noch offen |
 |---|---|---|
-| Fenster-App | Tabs, Adressleiste (Adresse, lokale Datei oder Suche), Verlauf, anklickbare Links (Strg+Klick = neuer Tab), Zoom, Themes inkl. Pride, Modi, Menü | Lesezeichen, Suche in der Seite, Downloads, Drucken, Einstellungsdialog |
-| Eigener Rendering-Kern | HTML-Parser, CSS-Teilmenge, Block-/Inline-Layout ([Kompatibilität](docs/COMPATIBILITY.md)) | JavaScript, Bilder, Formulare, Tabellenlayout, Flex/Grid |
-| Netzwerk | `http`/`https` mit TLS-Prüfung (Zertifikatsspeicher des Betriebssystems, nie umgangen), gzip, Größen- und Zeitlimits, **keine Cookies** | Sandbox, Logins/Cookies, Cache, externe Stylesheets und Bilder |
+| Fenster-App | Tabs, neue Fenster als Tabs, Adressleiste, Suche, Verlauf, Lesezeichen, Downloads, Zoom, Seitensuche, Themes und Seiten-Theme-Schalter | Drucken, Passwortverwaltung, Synchronisierung |
+| Web-Engine | Qt WebEngine/Chromium: JavaScript, moderne CSS-Layouts, Bilder, Formulare, Cookies, Local Storage und Web-APIs | Einige DRM-Dienste, spezielle Plattformfunktionen und Websites, die eingebettete Browser blockieren |
+| Seiten-Theme | Lokales CSS färbt Hintergründe, Text, Links und Formulare passend zum gewählten Theme; Bilder und Medien bleiben unverändert | Einzelne Websites können durch ihre eigenen Styles das Ergebnis begrenzen; pro Website abschaltbar (globaler Schalter) |
 | Ressourcenschonung | Modi (Normal, Ressourcenschonend, Akku, Gaming); inaktive Tabs geben ihren Speicher frei und laden beim Zurückwechseln neu | echte RAM-/CPU-Messung pro Tab |
 | Datensparmodus | Filterlogik (Tracker, Autoplay, Vorabladen, strikt) und Einsparungsbuch getestet. Die App lädt ohnehin nur das HTML-Dokument selbst – keine Skripte, Bilder oder Tracker | Einhängen des Filters, sobald Unterressourcen geladen werden |
 | Gaming-Erkennung | im Menü freiwillig einschaltbar (standardmäßig aus), rein lokal, optional automatischer Gaming-Modus | Praxistests gegen Fehlerkennungen |
 | Musik-Popup | Modell und Steuerlogik getestet; in der App noch nicht sichtbar (es gibt noch keine Medienwiedergabe) | sichtbares Popup, echte Medienquellen |
-| Themes | 4 Basis-Themes und 7 Pride-Themes mit automatischer Kontrastprüfung (WCAG AA), im Menü wählbar | eigene Themes über die Oberfläche, Tab-Design |
+| Themes | Basis-, Gothic-, Cyberpunk-, Wald-, Ozean-, Sakura-, Kaffee- und Mitternacht-Themes sowie Regenbogen-, Gay-, Trans-, Bi-, Pan-, Lesben-, Genderfluid-, Nichtbinär-, Asexuell-, Aromantisch- und Queer-Pride-Themes | Eigene Theme-Editor-Oberfläche |
 | Sicherheit | – | Sandboxing/Prozess-Isolation, Updates, Parser-Fuzzing ([Architektur](docs/ARCHITECTURE.md)) |
 
 **Noch nicht für Online-Banking oder andere sensible Seiten verwenden.**
@@ -154,3 +152,9 @@ Die Reihenfolge kann sich während der Entwicklung ändern. Sicherheit und eine 
 Ideen, Fehlerberichte und Verbesserungsvorschläge sind willkommen. Bitte kennzeichne in Vorschlägen klar, ob es um eine bereits vorhandene Funktion oder um einen zukünftigen Wunsch geht.
 
 **Nexlori – dein Browser, deine Ressourcen, dein Stil.**
+
+### Webseiten-Themes
+
+Mit der Schaltfläche **Aa** kannst du die Farben einer geöffneten Website an dein aktives Nexlori-Theme anpassen. Das lokale Stylesheet wird nur im Browser angewendet und nicht an die Website gesendet. Manche Seiten können dadurch anders aussehen; der Schalter lässt sich jederzeit deaktivieren.
+
+Die Oberfläche bietet unter anderem Gothic, Cyberpunk, Kaffee, Wald, Ozean, Sakura, Mitternacht sowie Pride-Themes für Gay, Regenbogen, Trans, Bi, Pan, Lesben, Genderfluid, Nichtbinär, Asexuell, Aromantisch und Queer.
