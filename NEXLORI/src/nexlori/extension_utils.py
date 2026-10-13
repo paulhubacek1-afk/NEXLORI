@@ -49,7 +49,7 @@ def bundled_ubolite_path() -> Path | None:
 
 def _localized_name(manifest: dict[str, Any], base: Path | None, archive: zipfile.ZipFile | None) -> str:
     raw = str(manifest.get("name") or "").strip()
-    match = re.fullmatch(r"__MSG_(\\w+)__", raw)
+    match = re.fullmatch(r"__MSG_(\w+)__", raw)
     if not match:
         return raw or "Unbenannte Erweiterung"
     locale = str(manifest.get("default_locale") or "en")
