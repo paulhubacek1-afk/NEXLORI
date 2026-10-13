@@ -21,7 +21,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .extension_utils import ExtensionPackageError, extension_key_from_name, inspect_extension_package, is_builtin_extension
+from .extension_utils import (
+    ExtensionPackageError,
+    extension_key_from_name,
+    extension_name_from_info,
+    inspect_extension_package,
+    is_builtin_extension,
+  )
 
 _MORE_ADDON_SOURCES = (
     ("Dark Reader", "https://github.com/darkreader/darkreader/releases"),
@@ -94,7 +100,7 @@ class ExtensionsDialog(QDialog):
     def _extensions(self) -> list[Any]:
         try:
             return [extension for extension in self.manager.extensions()
-                    if not is_builtin_extension(str(extension.name() or ""))]
+                    if not is_builtin_extension(extension_name_from_info(extension))]
         except (AttributeError, RuntimeError):
             return []
 
@@ -102,7 +108,7 @@ class ExtensionsDialog(QDialog):
         extensions = self._extensions()
         self.table.setRowCount(len(extensions))
         for row, extension in enumerate(extensions):
-            name = str(extension.name() or "Unbenanntes Add-on")
+            name = extension_name_from_info(extension)
             version = self._version(extension)
             loaded = bool(extension.isLoaded())
             enabled = bool(extension.isEnabled())
