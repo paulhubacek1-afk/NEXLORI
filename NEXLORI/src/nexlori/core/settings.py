@@ -38,6 +38,10 @@ class Settings:
     toolbar_visible_icons: list[str] = field(
         default_factory=lambda: ["home", "bookmark", "spotify", "page_theme", "theme"]
     )
+    auto_update_check: bool = True
+    ubol_enabled: bool = True
+    allow_web_popups: bool = False
+    extensions_enabled: dict[str, bool] = field(default_factory=lambda: {"ublock-origin-lite": True})
 
     def problems(self) -> list[str]:
         out = []
@@ -74,6 +78,14 @@ class Settings:
             or any(icon not in valid_icons for icon in self.toolbar_visible_icons)
         ):
             out.append("toolbar_visible_icons: ungültige oder doppelte Icons")
+        for field_name in ("auto_update_check", "ubol_enabled", "allow_web_popups"):
+            if not isinstance(getattr(self, field_name), bool):
+                out.append(f"{field_name}: true oder false erwartet")
+        if (
+            not isinstance(self.extensions_enabled, dict)
+            or any(not isinstance(key, str) or not isinstance(value, bool) for key, value in self.extensions_enabled.items())
+        ):
+            out.append("extensions_enabled: erwartet wird ein Wörterbuch aus Add-on-Namen und booleschem Status")
         return out
 
     @classmethod
