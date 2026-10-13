@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
+    QMenu,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -247,9 +248,12 @@ class ExtensionsDialog(QDialog):
 
     def open_sources(self) -> None:
         text = (
-            "Öffnet offizielle Projektseiten für weitere Erweiterungen. Nicht jede dort angebotene Datei "
-            "ist ein Qt-kompatibles Manifest-V3-Paket. Installiere nur ZIPs, deren manifest.json auf oberster Ebene liegt."
+            "Wähle eine offizielle Projektseite. Nicht jede dort angebotene Datei ist ein Qt-kompatibles "
+            "Manifest-V3-Paket. Importiere nur ZIPs, deren manifest.json auf oberster Ebene liegt."
         )
         QMessageBox.information(self, "Weitere Add-ons", text)
-        for _name, url in _MORE_ADDON_SOURCES:
-            QDesktopServices.openUrl(QUrl(url))
+        menu = QMenu(self)
+        for name, url in _MORE_ADDON_SOURCES:
+            action = menu.addAction(f"{name} – offizielle Releases")
+            action.triggered.connect(lambda _checked=False, target=url: QDesktopServices.openUrl(QUrl(target)))
+        menu.exec(self.mapToGlobal(self.rect().center()))
