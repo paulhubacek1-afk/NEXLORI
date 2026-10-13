@@ -30,7 +30,6 @@ UsePreviousAppDir=yes
 UsePreviousGroup=yes
 Uninstallable=yes
 
-[Tasks]
 [Files]
 Source: "..\dist\Nexlori.exe"; DestDir: "{app}"; Flags: ignoreversion
 
