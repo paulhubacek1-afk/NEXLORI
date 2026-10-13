@@ -106,6 +106,7 @@ jobs:
           $hash = (Get-FileHash "dist\Nexlori.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  Nexlori.exe" | Out-File -Encoding ascii "dist\Nexlori.exe.sha256"
           Get-Content "dist\Nexlori.exe.sha256"
+          Copy-Item "src\nexlori\vendor\UBOL-LICENSE.txt" "dist\UBOL-LICENSE.txt"
 
       - name: Inno Setup installieren
         run: choco install innosetup --no-progress -y
@@ -142,6 +143,7 @@ jobs:
             NEXLORI/dist/Nexlori.exe
             NEXLORI/dist/Nexlori.exe.sha256
             NEXLORI/dist/Nexlori-Setup.exe
+            NEXLORI/dist/UBOL-LICENSE.txt
           if-no-files-found: error
           retention-days: 30
 
@@ -170,10 +172,10 @@ jobs:
           $tag = "v" + "${{ needs.build.outputs.version }}"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --clobber
+            gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --clobber
           } else {
             if ($tag -match "-build\\.") {
-              gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --title "Nexlori $tag" --generate-notes --prerelease
+              gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes --prerelease
             } else {
               gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --title "Nexlori $tag" --generate-notes
             }
