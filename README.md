@@ -1,28 +1,31 @@
-# NEXLORI
+# NEXLORI 1.0.0
 
-Nexlori ist ein anpassbarer Windows-Browser auf Basis von Qt WebEngine/Chromium, mit einer eigenen, abgerundeten Suchleiste, wechselbaren Themes, einem Spotify-Mini-Player und einem lokal verschlüsselten Passwort-Tresor.
+Nexlori ist ein anpassbarer Windows-Browser auf Basis von Qt WebEngine/Chromium. Die erste offizielle Version enthält Themes, einen Add-on-Manager mit uBlock Origin Lite, einen Spotify-Mini-Player, einen verschlüsselten Passwort-Tresor und automatische Updates.
 
 ## Windows-Download
 
-- **Empfohlen:** Installiere `Nexlori-Setup.exe`. Der Installer erstellt ein Desktop-Symbol mit Nexlori-Icon und eine Startmenü-Verknüpfung.
-- **Portable:** `Nexlori.exe` ohne Installation starten.
-- **Prüfung:** `Nexlori.exe.sha256` enthält die SHA-256-Prüfsumme der portablen Version.
-
-**Aktuelle veröffentlichte Versionen:** [GitHub Releases](https://github.com/paulhubacek1-afk/NEXLORI/releases)
+- **Empfohlen:** [GitHub Releases](https://github.com/paulhubacek1-afk/NEXLORI/releases) öffnen und `Nexlori-Setup.exe` starten. Der Installer erstellt ein Desktop-Symbol mit Nexlori-Icon und einen Startmenü-Eintrag.
+- **Portable Version:** `Nexlori.exe` direkt starten.
+- **Prüfsumme:** `Nexlori.exe.sha256` enthält die SHA-256-Prüfsumme der portablen EXE.
 
 ## Enthaltene Funktionen
 
-- Chromium-WebEngine für JavaScript, moderne CSS-Layouts, Bilder, Formulare und die meisten modernen Websites.
-- Anpassbare Suchleiste und Icons, austauschbare Themes und drei Pride-Favoriten.
-- Viele Pride-Flaggen sowie Gothic, Cyberpunk, Wald, Ozean, Sakura, Mitternacht und Kaffee.
-- Spotify-Web-Mini-Player, Lesezeichen, Verlauf, Downloads, Zoom und Seitensuche.
-- Passwortmanager mit Master-Passphrase und verschlüsselter lokaler Ablage.
-- Update-Check mit HTTPS-Download, SHA-256-Prüfung und Windows-Selbstupdate.
+- Chromium-WebEngine für moderne Websites, JavaScript, CSS, Bilder und Formulare.
+- Anpassbare Suchleiste, Icon-Größe, sichtbare Schnellzugriffe und Suchmaschine.
+- Website-Themes mit optionalem CSS bei jedem neuen Dokument.
+- 60 Pride-Farbwelten und drei persönliche Favoriten.
+- uBlock Origin Lite als standardmäßig aktivierbares Manifest-V3-Add-on sowie ein Manager für weitere kompatible Erweiterungen.
+- Einstellungen für Themes, Add-ons, Pop-ups, Zoom und automatische Update-Prüfung.
+- Spotify-Mini-Player, Lesezeichen, Verlauf, Downloads, Seitensuche und Zoom.
+- Verschlüsselter Passwort-Tresor und Passwortgenerator.
+- HTTPS-Update-Download mit SHA-256-Prüfung; stabile Releases werden automatisch erstellt.
 
-Nicht jede Website wird garantiert unterstützt. Einzelne Dienste benötigen DRM- oder Plattformfunktionen, die eingebettete Browser blockieren können. Der Passwortmanager speichert lokal verschlüsselt, aber automatisches Einfügen von Zugangsdaten ist noch nicht aktiviert.
+Der Installer erzeugt das Desktop-Symbol sofort bei der Installation. Bei selbstständigen Builds kann Windows eine SmartScreen-Warnung zeigen, weil die EXE derzeit nicht digital signiert ist.
+
+**Hinweis:** Qt WebEngine unterstützt nur Manifest V3, daher wird uBlock Origin Lite verwendet. Nicht jede Website oder jedes Add-on funktioniert im eingebetteten Browser. Der Passwortmanager füllt Zugangsdaten noch nicht automatisch in Websites ein und wurde nicht unabhängig sicherheitszertifiziert.
 
 ## Feedback
 
-Anliegen, Fehler und Verbesserungen bitte über [GitHub Issues](https://github.com/paulhubacek1-afk/NEXLORI/issues/new) oder per E-Mail an [nexlori-browser@gmx.at](mailto:nexlori-browser@gmx.at) melden.
+Fehler, Anliegen und Verbesserungen bitte über [GitHub Issues](https://github.com/paulhubacek1-afk/NEXLORI/issues/new) oder per E-Mail an [nexlori-browser@gmx.at](mailto:nexlori-browser@gmx.at) melden.
 
-Weitere technische Details und die Entwicklungsanleitung stehen in [NEXLORI/README.md](NEXLORI/README.md).
+Die ausführliche Projektdokumentation steht in [NEXLORI/README.md](NEXLORI/README.md), Änderungsnotizen in [NEXLORI/CHANGELOG.md](NEXLORI/CHANGELOG.md).
