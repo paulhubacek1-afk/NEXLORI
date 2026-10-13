@@ -14,22 +14,27 @@ def test_website_theme_css_uses_the_selected_palette():
     assert theme.surface in css
     assert theme.fg in css
     assert theme.accent in css
-    assert "a:visited" in css
-    assert "textarea" in css
+    assert "color-scheme: dark" in css
+    assert "--nexlori-page-bg" in css
+    assert "--nexlori-page-surface" in css
+    assert "--nexlori-page-text" in css
 
 
-def test_website_theme_css_recolours_common_page_surfaces():
+def test_website_theme_css_does_not_override_page_colours_or_surfaces():
     css = page_theme_css(BUILTIN_THEMES["gothic"])
-    assert "*:not(img)" in css
-    assert '[class*="card" i]' in css
-    assert "background-color: var(--nexlori-page-surface) !important" in css
+    assert "*:not(img)" not in css
+    assert '[class*="card" i]' not in css
+    assert "!important" not in css
+    assert "background-color:" not in css
+    assert "a:visited" not in css
 
 
 def test_website_theme_css_leaves_media_and_layout_intact():
     css = page_theme_css(BUILTIN_THEMES["pride-gay"])
-    assert "Images, video, canvas" in css
     assert "display:none" not in css.replace(" ", "")
     assert "filter:" not in css
+    assert "iframe" not in css
+    assert "transform:" not in css
 
 def test_page_theme_is_preserved_for_every_navigation():
     from nexlori.page_theme import build_page_theme_script
