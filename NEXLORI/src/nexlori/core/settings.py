@@ -30,9 +30,9 @@ class Settings:
     popup_size: str = "small"
     notify_track_change: bool = False
     site_allowlist: list[str] = field(default_factory=list)
-    search_url: str = "https://html.duckduckgo.com/html/?q={}"  # {} wird durch die Suchanfrage ersetzt
+    search_url: str = "https://html.duckduckgo.com/html/?q={}&kp=1"  # {} wird durch die Suchanfrage ersetzt
     page_zoom: float = 1.0  # zusätzlich zur Bildschirmskalierung
-    adapt_page_theme: bool = True  # injiziert eine optionale, lokale Nutzer-Stylesheet in Websites
+    adapt_page_theme: bool = False  # standardmäßig kein CSS-Eingriff in fremde Websites
     pride_favorites: list[str] = field(default_factory=lambda: ["pride-gay", "pride-trans", "pride-regenbogen"])
     toolbar_search_width: int = 560
     toolbar_icon_size: int = 18
@@ -42,6 +42,7 @@ class Settings:
     auto_update_check: bool = True
     ubol_enabled: bool = True
     allow_web_popups: bool = False
+    block_nsfw: bool = True  # lokaler URL-Filter, standardmäßig aktiv
     extensions_enabled: dict[str, bool] = field(default_factory=lambda: {"ublock-origin-lite": True})
 
     def problems(self) -> list[str]:
@@ -88,7 +89,7 @@ class Settings:
             or any(icon not in valid_icons for icon in self.toolbar_visible_icons)
         ):
             out.append("toolbar_visible_icons: ungültige oder doppelte Icons")
-        for field_name in ("auto_update_check", "ubol_enabled", "allow_web_popups"):
+        for field_name in ("auto_update_check", "ubol_enabled", "allow_web_popups", "block_nsfw"):
             if not isinstance(getattr(self, field_name), bool):
                 out.append(f"{field_name}: true oder false erwartet")
         if (
