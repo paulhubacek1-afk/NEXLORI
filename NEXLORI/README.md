@@ -4,7 +4,7 @@
 
 Nexlori soll nicht einfach ein anderer Browser mit neuem Logo sein. Die Idee ist ein Browser mit eigener Identität, einer ruhigen und anpassbaren Oberfläche und Funktionen, die Rücksicht auf RAM, CPU, Akku und Datenverbrauch nehmen.
 
-> **Projektstand:** Nexlori 0.5.0 ist ein ausführbarer Windows-Browser auf Basis von Qt WebEngine/Chromium. Die Oberfläche, Themes, Updates, Spotify-Popup und verschlüsselte Passwortablage werden mit Tests und einem Windows-Selbsttest gebaut. Es ist weiterhin ein junges Projekt; nicht jede Website oder Sonderfunktion kann garantiert werden.
+> **Projektstand:** Nexlori 1.0.0 ist die erste offizielle Windows-Version auf Basis von Qt WebEngine 6.10+/Chromium. Sie enthält eine anpassbare Browserleiste, einstellbare Website-Themes, uBlock Origin Lite, einen MV3-Add-on-Manager, Spotify-Mini-Player, verschlüsselten Passwort-Tresor, Einstellungen und einen Update-Mechanismus. Der Build durchläuft automatische Tests und einen Windows-EXE-Selbsttest. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
 
 ## Die Grundidee
 
@@ -86,7 +86,7 @@ Nexlori soll ein Browser sein, in dem Menschen ihre Persönlichkeit zeigen könn
 
 ## Projektstand der Umsetzung
 
-Stand: **Nexlori 0.5.0**. Die Windows-Anwendung nutzt Qt WebEngine/Chromium für JavaScript, moderne CSS-Layouts, Bilder, Formulare, Cookies und Local Storage. Einzelne Webseiten können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren.
+Stand: **Nexlori 1.0.0**. Die Windows-Anwendung nutzt Qt WebEngine 6.10+/Chromium für JavaScript, moderne CSS-Layouts, Bilder, Formulare, Cookies und Local Storage. Einzelne Webseiten können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren.
 
 ### Nexlori für Windows herunterladen
 
@@ -96,7 +96,7 @@ Der Workflow **Windows-EXE** testet den Quellcode, baut die portable Anwendung, 
 - **Portable Version:** `Nexlori.exe` kann direkt aus einem beliebigen Ordner gestartet werden.
 - **Prüfsumme:** `Nexlori.exe.sha256` ermöglicht die SHA-256-Prüfung der portablen EXE.
 
-Öffne [GitHub Releases](https://github.com/paulhubacek1-afk/NEXLORI/releases) für veröffentlichte Versionen. Für jede Version wird ein Versions-Tag wie `v0.5.0` gebaut; der Workflow hängt EXE, Prüfsumme und Installer an den Release. In der App lässt sich im Menü manuell nach Updates suchen. Beim Start prüft Nexlori im Hintergrund GitHub Releases. Vor einem automatischen Austausch muss das heruntergeladene Programm zur veröffentlichten SHA-256-Prüfsumme passen.
+Öffne [GitHub Releases](https://github.com/paulhubacek1-afk/NEXLORI/releases) für veröffentlichte Versionen. Für jede stabile Version wird ein Versions-Tag wie `v1.0.0` gebaut; der Workflow hängt EXE, Prüfsumme und Installer an den Release. In der App lässt sich im Menü manuell nach Updates suchen. Beim Start prüft Nexlori im Hintergrund GitHub Releases. Vor einem automatischen Austausch muss das heruntergeladene Programm zur veröffentlichten SHA-256-Prüfsumme passen.
 
 Die EXE ist nicht digital signiert. Windows kann deshalb beim ersten Start eine SmartScreen-Warnung anzeigen. Einstellungen liegen in `%APPDATA%\\Nexlori\\settings.json`; dein verschlüsselter Passwort-Tresor liegt separat im selben Nexlori-Konfigurationsordner.
 
@@ -107,13 +107,14 @@ Die EXE ist nicht digital signiert. Windows kann deshalb beim ersten Start eine 
 | Browserleiste | Zentrierte, abgerundete Adress-/Suchleiste, in der Breite einstellbar; Icon-Größe und sichtbare Schnellzugriffe anpassbar; Suchmaschine wählbar |
 | Tabs und Web | Tabs, Zurück/Vorwärts, Neu laden, Startseite, Lesezeichen, Verlauf, Seitensuche, Zoom und Download-Dialog auf Basis von Chromium |
 | Themes | Basis-, Gothic-, Cyberpunk-, Wald-, Ozean-, Sakura-, Kaffee- und Mitternacht-Themes plus 60 Pride-Farbwelten für häufige Flaggen aus Gender-, Sexualitäts-, Romantik- und Ace-Spektrum. Drei Pride-Favoriten sind direkt auswählbar. |
-| Website-Farben | Der optionale Schalter „Aa“ wendet das vorhandene lokale Theme-CSS an. Webseiten können durch eigene Styles begrenzt werden; Bilder und Videos werden nicht pauschal umgefärbt. |
+| Website-Farben | Das lokale Theme-CSS wird bei jedem neuen Dokument bei DOM-Ready angewendet. Es bleibt optional und lässt sich in den Einstellungen abschalten; Webseiten können bestimmte Stile weiterhin selbst überschreiben. |
+| Add-ons | uBlock Origin Lite ist standardmäßig installiert und aktiv. Der Add-on-Manager kann kompatible Manifest-V3-ZIPs und entpackte Ordner installieren, aktivieren, deaktivieren oder entfernen. |
 | Spotify | Abtrennbarer Mini-Player mit Spotify-Weboberfläche und Link-Eingabe. Anmeldung und Wiedergabe richten sich nach Spotify und dem jeweiligen Konto. |
 | Passwortmanager | Lokaler verschlüsselter Tresor mit Master-Passphrase, Passwortgenerator, Kopieren und Löschen. Zugangsdaten werden nicht in Klartext gespeichert. Automatisches Einfügen in Websites ist noch nicht aktiviert. |
-| Updates | Release-Check, Download über HTTPS, SHA-256-Prüfung und Windows-Selbstupdate; Releases werden über Versions-Tags veröffentlicht. |
+| Updates | Automatischer oder manueller Release-Check, Download über HTTPS, SHA-256-Prüfung und Windows-Selbstupdate. Stabile Releases werden automatisch erstellt; fortlaufende CI-Builds sind als Vorab-Releases markiert. |
 | Feedback | [GitHub-Probleme und Verbesserungen](https://github.com/paulhubacek1-afk/NEXLORI/issues/new) oder E-Mail an [nexlori-browser@gmx.at](mailto:nexlori-browser@gmx.at). |
 
-Nexlori ist noch jung und nicht unabhängig sicherheitszertifiziert. Verwende es nicht als einzigen Passwortmanager für besonders sensible Konten oder für Online-Banking, bevor es ausreichend praktisch und sicherheitsbezogen geprüft wurde.
+Nexlori 1.0.0 ist eine erste offizielle Version, aber weder der Browser noch der Passwortmanager wurden unabhängig sicherheitszertifiziert. Automatisches Einfüllen von Passwörtern ist noch nicht aktiviert. Verwende ihn nicht als einzigen Passwortmanager für besonders sensible Konten oder Online-Banking. Qt WebEngine unterstützt derzeit Manifest-V3-Erweiterungen; deshalb wird uBlock Origin Lite und nicht die separate Manifest-V2-Version eingebunden. Siehe [Änderungsprotokoll](CHANGELOG.md).
 
 ### Entwickeln
 
