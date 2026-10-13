@@ -1328,74 +1328,37 @@ QLabel {{ background:transparent; }}
         super().closeEvent(event)
 
 
-def _selftest_ubol_extension() -> tuple[bool, str]:
-    """Verify that the bundled uBlock Origin Lite installs and can be enabled."""
-    import tempfile
+def _selftest_ubol_package() -> tuple[bool, str]:
+    """Verify the bundled uBlock Origin Lite archive without starting extension subprocesses.
 
-    app = QApplication.instance() or QApplication(["Nexlori-uBOL-selftest"])
+    Qt WebEngine's extension runtime has native Chromium subprocesses; the EXE packaging
+    smoke test must not install/enable extensions and then tear their profile down in the
+    same short-lived test process. The package itself is hash-checked at build time and
+    its manifest/identity are checked again here.
+    """
+    import hashlib
+
+    from .extension_utils import UBOLITE_SHA256, bundled_ubolite_path, inspect_extension_package
+
     package = bundled_ubolite_path()
     if package is None:
         return False, "Das geprüfte uBlock-Origin-Lite-Paket fehlt."
-    temp = tempfile.TemporaryDirectory(prefix="nexlori-ubol-selftest-")
-    profile = None
+    digest = hashlib.sha256()
     try:
-        profile_root = Path(temp.name)
-        profile = QWebEngineProfile("NexloriUbolSelfTest", app)
-        profile.setPersistentStoragePath(str(profile_root / "profile"))
-        profile.setCachePath(str(profile_root / "cache"))
-        manager = profile.extensionManager()
-        loop = QEventLoop()
-        outcome: dict[str, object] = {}
-
-        def install_finished(extension) -> None:
-            if extension_key_from_info(extension) != "ublock-origin-lite":
-                return
-            if not extension.isInstalled() or not extension.isLoaded():
-                outcome["error"] = str(extension.error() or "uBlock Origin Lite wurde nicht korrekt geladen.")
-            else:
-                outcome["extension"] = extension
-                outcome["name"] = extension_name_from_info(extension)
-            loop.quit()
-
-        manager.installFinished.connect(install_finished)
-        manager.installExtension(str(package))
-        QTimer.singleShot(45_000, loop.quit)
-        loop.exec()
-        try:
-            manager.installFinished.disconnect(install_finished)
-        except (RuntimeError, TypeError):
-            pass
-
-        extension = outcome.get("extension")
-        if extension is None:
-            return False, str(outcome.get("error") or "Installation von uBlock Origin Lite hat das Zeitlimit überschritten.")
-
-        # Run the state change after installFinished has returned to Qt's event loop.
-        try:
-            manager.setExtensionEnabled(extension, True)
-        except Exception as exc:  # noqa: BLE001
-            return False, f"uBlock Origin Lite ließ sich nicht aktivieren: {type(exc).__name__}: {exc}"
-        QTimer.singleShot(250, loop.quit)
-        loop.exec()
-        if not bool(extension.isEnabled()):
-            current = next(
-                (item for item in manager.extensions()
-                 if extension_key_from_info(item) == "ublock-origin-lite"),
-                None,
-            )
-            if current is None or not current.isEnabled():
-                return False, "uBlock Origin Lite wurde installiert, bleibt aber deaktiviert."
-        return True, f"{outcome.get('name', 'uBlock Origin Lite')} installiert und aktiviert"
+        with package.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual = digest.hexdigest()
+        if actual.lower() != UBOLITE_SHA256.lower():
+            return False, "SHA-256-Prüfsumme des eingebauten uBlock-Origin-Lite-Pakets stimmt nicht."
+        details = inspect_extension_package(package)
+        name = str(details.get("name") or "")
+        if details.get("manifest_version") != 3 or "ublock" not in name.casefold():
+            return False, "Das Paket ist keine gültige Manifest-V3-Version von uBlock Origin Lite."
+        return True, f"{name} {details.get('version', '')} · Manifest V3 und SHA-256 geprüft"
     except Exception as exc:  # noqa: BLE001
         return False, f"{type(exc).__name__}: {exc}"
-    finally:
-        if profile is not None:
-            profile.deleteLater()
-            app.processEvents()
-        try:
-            temp.cleanup()
-        except OSError:
-            pass
+
 
 
 def _selftest_webengine() -> tuple[bool, str]:
