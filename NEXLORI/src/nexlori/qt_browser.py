@@ -50,7 +50,7 @@ from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
 from .core.themes import BUILTIN_THEMES, Theme
-from .extension_utils import bundled_ubolite_path, extension_key_from_name
+from .extension_utils import bundled_ubolite_path, extension_key_from_name, is_builtin_extension
 from .page_theme import build_page_theme_script
 
 APP_NAME = "Nexlori"
@@ -1059,8 +1059,9 @@ QLabel {{ background:transparent; }}
             for extension in self.extension_manager.extensions():
                 if not extension.isLoaded():
                     continue
-                key = extension_key_from_name(str(extension.name() or ""))
-                if not key:
+                extension_name = str(extension.name() or "")
+                key = extension_key_from_name(extension_name)
+                if not key or is_builtin_extension(extension_name):
                     continue
                 if key == "ublock-origin-lite":
                     enabled = bool(self.settings.ubol_enabled)
