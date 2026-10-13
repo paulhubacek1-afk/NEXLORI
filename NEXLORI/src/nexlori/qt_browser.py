@@ -50,7 +50,13 @@ from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
 from .core.themes import BUILTIN_THEMES, Theme
-from .extension_utils import bundled_ubolite_path, extension_key_from_name, is_builtin_extension
+from .extension_utils import (
+    bundled_ubolite_path,
+    extension_key_from_info,
+    extension_key_from_name,
+    extension_name_from_info,
+    is_builtin_extension,
+  )
 from .page_theme import build_page_theme_script
 
 APP_NAME = "Nexlori"
@@ -1010,7 +1016,7 @@ QLabel {{ background:transparent; }}
         except (AttributeError, RuntimeError):
             extensions = []
         installed = any(
-            extension_key_from_name(str(ext.name() or "")) == "ublock-origin-lite"
+            extension_key_from_info(ext) == "ublock-origin-lite"
             and bool(ext.isInstalled())
             for ext in extensions
         )
@@ -1036,7 +1042,7 @@ QLabel {{ background:transparent; }}
                 reason = str(extension.error() or "Unbekannter Installationsfehler")
                 self.statusBar().showMessage(f"Add-on-Installation fehlgeschlagen: {reason}", 8000)
                 return
-            name = str(extension.name() or "Unbenanntes Add-on")
+            name = extension_name_from_info(extension)
             key = extension_key_from_name(name)
             enabled = bool(self.settings.ubol_enabled) if key == "ublock-origin-lite" else True
             self.settings.extensions_enabled[key] = enabled
@@ -1059,7 +1065,7 @@ QLabel {{ background:transparent; }}
             for extension in self.extension_manager.extensions():
                 if not extension.isLoaded():
                     continue
-                extension_name = str(extension.name() or "")
+                extension_name = extension_name_from_info(extension)
                 key = extension_key_from_name(extension_name)
                 if not key or is_builtin_extension(extension_name):
                     continue
@@ -1075,7 +1081,7 @@ QLabel {{ background:transparent; }}
     def set_extension_enabled(self, extension, enabled: bool) -> None:
         if self.extension_manager is None:
             raise RuntimeError("Qt WebEngine unterstützt in diesem Build keine Erweiterungen.")
-        name = str(extension.name() or "Unbenanntes Add-on")
+        name = extension_name_from_info(extension)
         key = extension_key_from_name(name)
         self.extension_manager.setExtensionEnabled(extension, bool(enabled))
         self.settings.extensions_enabled[key] = bool(enabled)
@@ -1327,7 +1333,7 @@ def _selftest_ubol_extension() -> tuple[bool, str]:
 
         def install_finished(extension) -> None:
             name = str(extension.name() or "")
-            if extension_key_from_name(name) != "ublock-origin-lite":
+            if extension_key_from_info(extension) != "ublock-origin-lite":
                 return
             if not extension.isInstalled() or not extension.isLoaded():
                 outcome["error"] = str(extension.error() or "uBlock Origin Lite wurde nicht korrekt geladen.")
@@ -1335,7 +1341,7 @@ def _selftest_ubol_extension() -> tuple[bool, str]:
                 return
             try:
                 manager.setExtensionEnabled(extension, True)
-                outcome["name"] = name
+                outcome["name"] = extension_name_from_info(extension)
                 outcome["enabled"] = bool(extension.isEnabled())
                 outcome["error"] = str(extension.error() or "")
             except Exception as exc:  # noqa: BLE001
