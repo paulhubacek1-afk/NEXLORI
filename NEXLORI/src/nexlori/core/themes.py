@@ -179,7 +179,7 @@ _THEMES = [
     _pride("pride-aroace", "Pride – Aromantisch-Asexuell", "#F59E0B",
            ("#E28C00", "#ECCD00", "#FFFFFF", "#62AEDC", "#203856")),
     _pride("pride-intersex", "Pride – Intersex", "#F6D75D",
-           ("#FFD800", "#7B2CBF")),
+           ("#FFD800", "#7B2CBF", "#FFD800")),
     _pride("pride-bear", "Pride – Bear", "#E5B77C",
            ("#623804", "#D56300", "#FEDD63", "#FFFFFF", "#D3D3D3", "#555555", "#000000")),
     _pride("pride-leather", "Pride – Leather", "#71C8F3",
