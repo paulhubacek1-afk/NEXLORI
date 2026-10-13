@@ -5,6 +5,7 @@ Aufruf (im Projektordner):
     python packaging/make_icon.py        # optional, erzeugt das Icon
     python packaging/build_exe.py        # Ergebnis: dist/Nexlori.exe
 """
+import os
 import sys
 from pathlib import Path
 
@@ -30,5 +31,13 @@ args = [
 icon = root / "packaging" / "nexlori.ico"
 if sys.platform == "win32" and icon.exists():
     args += ["--icon", str(icon)]
+vendor_dir = root / "src" / "nexlori" / "vendor"
+ubol_zip = vendor_dir / "ubol.zip"
+ubol_license = vendor_dir / "UBOL-LICENSE.txt"
+if sys.platform == "win32" and (not ubol_zip.exists() or not ubol_license.exists()):
+    raise SystemExit("uBlock Origin Lite fehlt. Vor dem Build packaging/download_extensions.py ausführen.")
+if ubol_zip.exists() and ubol_license.exists():
+    args += ["--add-data", f"{ubol_zip}{os.pathsep}nexlori/vendor"]
+    args += ["--add-data", f"{ubol_license}{os.pathsep}nexlori/vendor"]
 args.append(str(root / "packaging" / "nexlori_gui.py"))
 PyInstaller.__main__.run(args)
