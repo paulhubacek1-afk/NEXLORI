@@ -7,6 +7,7 @@ from nexlori.extension_utils import (
     ExtensionPackageError,
     extension_key_from_name,
     inspect_extension_package,
+    unpack_extension_package,
 )
 
 
@@ -82,3 +83,29 @@ def test_zip_without_root_manifest_is_rejected(tmp_path):
         archive.writestr("folder/manifest.json", json.dumps({"manifest_version": 3, "name": "Nested", "version": "1"}))
     with pytest.raises(ExtensionPackageError, match="Hauptverzeichnis"):
         inspect_extension_package(path)
+
+
+def test_extension_zip_is_safely_unpacked_for_qt(tmp_path):
+    package = _write_zip(
+        tmp_path / "demo.zip",
+        {"manifest_version": 3, "name": "Demo Add-on", "version": "1.2.3"},
+        extra={"worker.js": "self.demo = true;"},
+    )
+    destination = tmp_path / "profile" / "extensions" / "demo"
+    unpacked = unpack_extension_package(package, destination)
+    assert unpacked == destination.resolve()
+    assert (unpacked / "manifest.json").is_file()
+    assert (unpacked / "worker.js").read_text(encoding="utf-8") == "self.demo = true;"
+    assert inspect_extension_package(unpacked)["name"] == "Demo Add-on"
+
+
+def test_unpack_rejects_path_traversal_and_cleans_temporary_files(tmp_path):
+    package = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr("manifest.json", json.dumps({"manifest_version": 3, "name": "Bad", "version": "1"}))
+        archive.writestr("../escape.txt", "not safe")
+    destination = tmp_path / "profile" / "extensions" / "unsafe"
+    with pytest.raises(ExtensionPackageError, match="unsicheren Dateipfad"):
+        unpack_extension_package(package, destination)
+    assert not (tmp_path / "escape.txt").exists()
+    assert not destination.with_name(destination.name + ".extracting").exists()
