@@ -1,0 +1,78 @@
+name: Windows-EXE
+
+# Baut Nexlori.exe auf einem Windows-Runner.
+#  - manuell:      Actions -> "Windows-EXE" -> "Run workflow"
+#  - bei Pull Requests, die Code oder Packaging ändern (Probebau)
+#  - bei einem Tag "v*" (z. B. v0.2.0): zusätzlich wird ein GitHub-Release mit der EXE angelegt
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "packaging/**"
+      - "pyproject.toml"
+      - ".github/workflows/build-windows.yml"
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write # nur für das Anlegen des Releases bei Tags
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,gaming]" pyinstaller
+
+      - name: Tests (inklusive Fenster-Tests)
+        run: python -m pytest -q
+
+      - name: Icon erzeugen
+        run: python packaging/make_icon.py
+
+      - name: Nexlori.exe bauen
+        run: python packaging/build_exe.py
+
+      - name: Selbsttest der gebauten EXE
+        shell: pwsh
+        run: |
+          $out = Join-Path $PWD "selftest.txt"
+          $p = Start-Process -FilePath "dist\Nexlori.exe" -ArgumentList "--selftest", $out -Wait -PassThru
+          if (Test-Path $out) { Get-Content $out }
+          if ($p.ExitCode -ne 0) { throw "Selbsttest der EXE fehlgeschlagen (Exit-Code $($p.ExitCode))" }
+
+      - name: Prüfsumme erzeugen
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "dist\Nexlori.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  Nexlori.exe" | Out-File -Encoding ascii "dist\Nexlori.exe.sha256"
+          Get-Content "dist\Nexlori.exe.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nexlori-Windows-x64
+          path: |
+            dist/Nexlori.exe
+            dist/Nexlori.exe.sha256
+          if-no-files-found: error
+
+      - name: GitHub-Release anlegen (nur bei Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "${{ github.ref_name }}" dist\Nexlori.exe dist\Nexlori.exe.sha256
+          --title "Nexlori ${{ github.ref_name }}" --generate-notes --prerelease
