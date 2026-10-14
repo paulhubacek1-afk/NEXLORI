@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
     defaults:
       run:
         working-directory: NEXLORI
@@ -37,9 +38,9 @@ jobs:
           if (-not $match) { throw "Programmversion aus pyproject.toml konnte nicht gelesen werden." }
           $version = $match.Matches[0].Groups[1].Value
 
-          # The first main build is stable. Later main builds get unique prerelease
-          # versions after the stable release exists. Use the REST API so a missing
-          # release (HTTP 404) cannot fail the whole PowerShell step via native exit codes.
+          # Publish only intentional stable versions. Ordinary main builds still
+          # produce CI artifacts but never create -build prereleases or overwrite a release.
+          $publish = "true"
           if ($env:GITHUB_EVENT_NAME -eq "push" -and $env:GITHUB_REF -eq "refs/heads/main") {
             $stableTag = "v" + $version
             $headers = @{
@@ -50,7 +51,8 @@ jobs:
             try {
               $stableRelease = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$stableTag" -Headers $headers
               if ($stableRelease -and -not $stableRelease.draft) {
-                $version = "$version-build.$env:GITHUB_RUN_NUMBER"
+                $publish = "false"
+                Write-Host "Stable release $stableTag already exists. This push will create CI artifacts only."
               }
             } catch {
               $status = 0
@@ -64,7 +66,8 @@ jobs:
           $source = [regex]::Replace($source, '__version__ = "[^"]+"', "__version__ = `"$version`"")
           [System.IO.File]::WriteAllText((Resolve-Path $initPath), $source, [System.Text.UTF8Encoding]::new($false))
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Build version: $version"
+          "publish=$publish" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Build version: $version; publish release: $publish"
 
       - name: Python einrichten
         uses: actions/setup-python@v5
@@ -201,7 +204,7 @@ jobs:
 
   release:
     name: GitHub-Release erstellen oder aktualisieren
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.outputs.publish == 'true'
     needs: build
     runs-on: windows-latest
     permissions:
@@ -227,15 +230,10 @@ jobs:
           $tag = "v" + "${{ needs.build.outputs.version }}"
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --clobber
-          } else {
-            if ($tag -match '-build\.') {
-              gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes --prerelease
-            } else {
-              gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes
-            }
+            throw "Stable release $tag already exists. Increase project version before publishing another release."
           }
-          if ($LASTEXITCODE -ne 0) { throw "GitHub-Release konnte nicht erstellt oder aktualisiert werden." }
+          gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw "GitHub-Release konnte nicht erstellt werden." }
 
           # The updater requires the portable EXE and its checksum; never silently
           # publish an installer-only release that the in-app updater cannot use.
