@@ -67,7 +67,18 @@ def check_for_update(current_version: str, timeout: float = 8.0) -> dict[str, An
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            data = json.loads(response.read(4 * 1024 * 1024 + 1).decode("utf-8"))
+            raw = response.read(4 * 1024 * 1024 + 1)
+            if len(raw) > 4 * 1024 * 1024:
+                raise UpdateError("Die Release-Antwort von GitHub ist unerwartet groß.")
+            data = json.loads(raw.decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in (403, 429):
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            suffix = f" Versuche es in {retry_after} Sekunden erneut." if retry_after and retry_after.isdigit() else " Versuche es später erneut."
+            raise UpdateError("GitHub begrenzt gerade Update-Anfragen." + suffix) from exc
+        if exc.code == 404:
+            raise UpdateError("Die GitHub-Release-API wurde nicht gefunden. Prüfe die Repository-Adresse.") from exc
+        raise UpdateError(f"GitHub hat die Update-Suche mit HTTP {exc.code} abgelehnt.") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise UpdateError("GitHub ist gerade nicht erreichbar. Prüfe deine Internetverbindung.") from exc
     except (ValueError, UnicodeDecodeError) as exc:
