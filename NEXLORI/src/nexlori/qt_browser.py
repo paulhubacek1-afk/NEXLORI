@@ -524,7 +524,7 @@ class NexloriWindow(QMainWindow):
                 view.page().setBackgroundColor(self._qt_color(self.theme.bg))
                 self.apply_page_theme(view)
                 if getattr(view, '_nexlori_start', False):
-                    view.setHtml(_start_page(self.theme), QUrl('about:blank'))
+                    view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl('about:blank'))
         self.statusBar().showMessage(f"Themes kombiniert: {self.theme.label}", 3500)
 
     def edit_pride_favorites(self) -> None:
@@ -773,7 +773,7 @@ QLabel {{ background:transparent; }}
                 view.page().setBackgroundColor(self._qt_color(self.theme.bg))
                 self.apply_page_theme(view)
                 if getattr(view, "_nexlori_start", False):
-                    view.setHtml(_start_page(self.theme), QUrl("about:blank"))
+                    view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
         self.statusBar().showMessage(f"Theme: {self.theme.label}", 2500)
 
     @staticmethod
@@ -846,7 +846,7 @@ QLabel {{ background:transparent; }}
             self.tabs.setCurrentIndex(index)
         if start_page:
             view._nexlori_start = True
-            view.setHtml(_start_page(self.theme), QUrl("about:blank"))
+            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
         elif url:
             view._nexlori_start = False
             view.setUrl(QUrl(url))
@@ -957,7 +957,7 @@ QLabel {{ background:transparent; }}
     def navigate_view(self, view: QWebEngineView, url: str) -> None:
         if url.lower() in {"about:start", "nexlori:start"}:
             view._nexlori_start = True
-            view.setHtml(_start_page(self.theme), QUrl("about:blank"))
+            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
             return
         view._nexlori_start = False
         view.setUrl(QUrl(url))
@@ -977,7 +977,7 @@ QLabel {{ background:transparent; }}
         if view is None:
             return
         if getattr(view, "_nexlori_start", False) and view.url().toString() == "about:blank":
-            view.setHtml(_start_page(self.theme), QUrl("about:blank"))
+            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
         else:
             view.reload()
 
@@ -985,7 +985,7 @@ QLabel {{ background:transparent; }}
         view = self.current_view()
         if view:
             view._nexlori_start = True
-            view.setHtml(_start_page(self.theme), QUrl("about:blank"))
+            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
             index = self.tabs.indexOf(view)
             if index >= 0:
                 self.tabs.setTabText(index, "Nexlori · Startseite")
