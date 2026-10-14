@@ -235,3 +235,14 @@ jobs:
               gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes
             }
           }
+          if ($LASTEXITCODE -ne 0) { throw "GitHub-Release konnte nicht erstellt oder aktualisiert werden." }
+
+          # The updater requires the portable EXE and its checksum; never silently
+          # publish an installer-only release that the in-app updater cannot use.
+          $assetNames = gh release view $tag --json assets --jq '.assets[].name'
+          if ($LASTEXITCODE -ne 0) { throw "Release-Assets konnten nicht überprüft werden." }
+          foreach ($required in @("Nexlori.exe", "Nexlori.exe.sha256", "Nexlori-Setup.exe")) {
+            if ($assetNames -notcontains $required) {
+              throw "Release-Asset fehlt: $required. Der In-App-Updater benötigt Nexlori.exe und Nexlori.exe.sha256."
+            }
+          }
