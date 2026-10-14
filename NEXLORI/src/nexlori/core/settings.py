@@ -30,7 +30,7 @@ class Settings:
     popup_size: str = "small"
     notify_track_change: bool = False
     site_allowlist: list[str] = field(default_factory=list)
-    search_url: str = "https://html.duckduckgo.com/html/?q={}&kp=1"  # {} wird durch die Suchanfrage ersetzt
+    search_url: str = "https://html.duckduckgo.com/html/?q={}"  # {} wird durch die Suchanfrage ersetzt
     page_zoom: float = 1.0  # zusätzlich zur Bildschirmskalierung
     adapt_page_theme: bool = False  # standardmäßig kein CSS-Eingriff in fremde Websites
     pride_favorites: list[str] = field(default_factory=lambda: ["pride-gay", "pride-trans", "pride-regenbogen"])
