@@ -840,6 +840,9 @@ QLabel {{ background:transparent; }}
         view.loadStarted.connect(lambda w=view: self._load_started(w))
         view.loadProgress.connect(lambda value, w=view: self._load_progress(w, value))
         view.loadFinished.connect(lambda ok, w=view: self._load_finished(w, ok))
+        view.page().renderProcessTerminated.connect(
+            lambda status, exit_code, w=view: self._on_render_process_terminated(w, status, exit_code)
+        )
         view.page().linkHovered.connect(self._on_link_hovered)
         index = self.tabs.addTab(view, "Neuer Tab")
         if activate:
@@ -925,6 +928,19 @@ QLabel {{ background:transparent; }}
             index = self.tabs.indexOf(view)
             if index >= 0:
                 self.tabs.setTabText(index, "Nexlori · Startseite")
+
+    def _on_render_process_terminated(self, view: QWebEngineView, status, exit_code: int) -> None:
+        """Keep Nexlori open when a Chromium renderer process crashes or is killed."""
+        if self.tabs.indexOf(view) < 0 or self._closing:
+            return
+        self.progress.hide()
+        status_name = getattr(status, "name", str(status))
+        self.statusBar().showMessage(
+            f"Ein Tab wurde von Chromium beendet ({status_name}, Code {exit_code}). "
+            "Nexlori bleibt geöffnet. Klicke auf „Neu laden“, um es erneut zu versuchen.",
+            10000,
+        )
+        self.reload_button.setEnabled(True)
 
     def _on_link_hovered(self, url: str) -> None:
         if url:
