@@ -2,7 +2,9 @@ import hashlib
 
 import pytest
 
-from nexlori.updater import UpdateError, download_verified_update, find_update, version_tuple
+import urllib.error
+
+from nexlori.updater import UpdateError, check_for_update, download_verified_update, find_update, version_tuple
 
 
 def release(version, *, draft=False, prerelease=False, include_assets=True):
@@ -84,3 +86,36 @@ def test_verified_download_rejects_hash_mismatch(monkeypatch, tmp_path):
 def test_missing_release_assets_are_rejected(tmp_path):
     with pytest.raises(UpdateError, match="fehlen"):
         download_verified_update(release("0.4.0", include_assets=False), tmp_path)
+
+
+
+def test_update_check_reports_github_rate_limit(monkeypatch):
+    def rate_limited(*args, **kwargs):
+        raise urllib.error.HTTPError(
+            "https://api.github.com/repos/example/releases",
+            403,
+            "rate limited",
+            {"Retry-After": "30"},
+            None,
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", rate_limited)
+    with pytest.raises(UpdateError, match="begrenzt gerade Update-Anfragen") as exc:
+        check_for_update("1.0.0")
+    assert "30 Sekunden" in str(exc.value)
+
+
+def test_update_check_rejects_oversized_release_response(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, size):
+            return b"x" * size
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: FakeResponse())
+    with pytest.raises(UpdateError, match="unerwartet groß"):
+        check_for_update("1.0.0")
