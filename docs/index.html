@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#100d17">
+<title>Nexlori Themes – Dein Look, dein Browser</title>
+<meta name="description" content="Entdecke Nexlori-Browserthemes und aktiviere Farben direkt in Nexlori. Keine Theme-Downloads.">
+<style>
+:root{color-scheme:dark;--bg:#100d17;--panel:#1b1625;--text:#f7f2ff;--muted:#bcb0cb;--accent:#bd8cff;--line:#352a46}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 15% -5%,#3a2055 0,transparent 42%),radial-gradient(ellipse at 95% 15%,#153c4a 0,transparent 38%),var(--bg);color:var(--text);font:16px/1.55 "Segoe UI",system-ui,sans-serif;min-height:100vh}
+a{color:inherit}
+main{max-width:1200px;margin:auto;padding:26px 22px 70px}
+header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:12px 0 55px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:.04em;font-size:1.1rem}
+.logo{width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,#fc76d3,#9872ff 45%,#54dfff);box-shadow:0 8px 30px #9d69ff45;display:grid;place-items:center;color:#170f22;font-weight:900;font-size:24px}
+.pill{border:1px solid #5a466e;border-radius:999px;padding:8px 13px;color:#e8d8ff;text-decoration:none;font-size:.9rem}
+.hero{max-width:800px;margin:0 0 34px}
+.kicker{text-transform:uppercase;letter-spacing:.18em;color:#d5a9ff;font-weight:700;font-size:.75rem}
+h1{font-size:clamp(2.5rem,7vw,5rem);line-height:.99;letter-spacing:-.055em;margin:15px 0 20px}
+h1 span{background:linear-gradient(90deg,#ff9cdd,#b5a4ff,#8de8ff);color:transparent;background-clip:text}
+.lede{font-size:1.15rem;color:var(--muted);max-width:680px}
+.note{margin:28px 0 40px;background:#ffffff08;border:1px solid #ffffff18;border-radius:18px;padding:17px 20px;color:#e4d9f1}
+.tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:28px 0 20px}
+input,select{font:inherit;background:#1e172a;color:var(--text);border:1px solid #473656;border-radius:12px;padding:12px 15px;outline:none}
+input{flex:1;min-width:220px}input:focus,select:focus{border-color:#bd8cff;box-shadow:0 0 0 3px #bd8cff24}
+.count{color:var(--muted);font-size:.9rem}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.card{border:1px solid #ffffff16;border-radius:18px;background:linear-gradient(160deg,#ffffff0b,#ffffff03);padding:14px;transition:transform .18s,border-color .18s,background .18s;min-width:0}
+.card:hover{transform:translateY(-3px);border-color:#bd8cff88;background:#ffffff0d}
+.swatches{height:115px;border-radius:12px;overflow:hidden;display:flex;box-shadow:inset 0 0 0 1px #ffffff22}
+.swatches i{display:block;flex:1}
+.card h2{font-size:1.02rem;margin:14px 0 3px;letter-spacing:-.01em}
+.card p{margin:0 0 15px;color:var(--muted);font-size:.87rem;min-height:42px}
+.install{display:flex;justify-content:center;align-items:center;width:100%;padding:10px 12px;background:linear-gradient(95deg,#d991ff,#8da7ff);color:#1a1028;text-decoration:none;font-weight:800;border-radius:10px;font-size:.92rem}
+.install:hover{filter:brightness(1.08)}
+small{color:var(--muted)}
+footer{border-top:1px solid var(--line);margin-top:50px;padding-top:22px;color:var(--muted);display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}
+@media(max-width:980px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:690px){main{padding-inline:15px}header{padding-bottom:34px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.swatches{height:90px}}
+@media(max-width:410px){.grid{grid-template-columns:1fr}.card{display:grid;grid-template-columns:90px 1fr;column-gap:13px}.swatches{height:100px;grid-row:span 3}.card h2{margin-top:3px}.card p{min-height:0}.install{grid-column:2}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body><main>
+<header><div class="brand"><div class="logo">N</div><span>NEXLORI <small>THEMES</small></span></div><a class="pill" href="https://github.com/paulhubacek1-afk/NEXLORI">Projekt auf GitHub ↗</a></header>
+<section class="hero"><div class="kicker">Dein Browser. Dein Stil.</div><h1>Mach Nexlori zu <span>deinem Nexlori.</span></h1><p class="lede">Entdecke Farbwelten für deine Browseroberfläche. In Nexlori genügt ein Klick auf „Aktivieren“ – ohne Theme-ZIP-Dateien und ohne Downloads-Ordner voller Dateien.</p></section>
+<div class="note"><strong>So funktioniert es:</strong> Öffne diese Galerie in Nexlori und klicke bei einem Theme auf „Aktivieren“. Nexlori übernimmt die Farben direkt. Die Galerie kann nur Themes aktivieren, die in deiner installierten Browser-Version enthalten sind; sie führt keinen fremden Code aus.</div>
+<div class="tools"><input id="search" type="search" placeholder="Themes suchen …" aria-label="Themes suchen"><select id="filter" aria-label="Themes filtern"><option value="all">Alle Looks</option><option value="dark">Dunkle Themes</option><option value="light">Helle Themes</option><option value="pride">Pride-Themes</option><option value="neon">Neon & Farben</option></select><span class="count" id="count"></span></div>
+<section class="grid" id="grid" aria-live="polite"></section>
+<footer><span>Nexlori Theme Gallery · GitHub Pages</span><span><a href="https://github.com/paulhubacek1-afk/NEXLORI/issues/new">Theme vorschlagen oder Fehler melden</a> · <a href="https://github.com/paulhubacek1-afk/NEXLORI/releases">Windows-Versionen</a></span></footer>
+</main>
+<script>
+const themes=[
+{id:"hell",name:"Hell",desc:"Klar und lichtdurchflutet",colors:["#FFFFFF","#F0F0F4","#4533D6"],type:"light"},
+{id:"dunkel",name:"Dunkel",desc:"Ruhig und elegant",colors:["#121214","#1E1E23","#8AB4FF"],type:"dark"},
+{id:"ruhig",name:"Ruhig",desc:"Sanfte, zurückhaltende Farben",colors:["#F4F1EA","#E9E5DA","#2F5E4E"],type:"light"},
+{id:"hochkontrast",name:"Hoher Kontrast",desc:"Deutliche Kontraste",colors:["#000000","#000000","#FFFF00"],type:"dark"},
+{id:"gothic",name:"Gothic",desc:"Dunkel, mystisch und violett",colors:["#100C14","#211927","#E29BCE"],type:"dark"},
+{id:"cyberpunk",name:"Cyberpunk",desc:"Neonpink trifft digitales Blau",colors:["#100A24","#211743","#F72585"],type:"neon"},
+{id:"forest",name:"Wald",desc:"Tiefes Grün und Natur",colors:["#0D1B15","#193126","#78D6A3"],type:"dark"},
+{id:"ocean",name:"Ozean",desc:"Kühle Blautöne",colors:["#0C1724","#162A3D","#77D4FF"],type:"dark"},
+{id:"sakura",name:"Sakura",desc:"Kirschblüte und Rosé",colors:["#261722","#3B2134","#FF9ACF"],type:"dark"},
+{id:"mitternacht",name:"Mitternacht",desc:"Tiefblau und ruhige Akzente",colors:["#090D18","#141A2B","#93AFFF"],type:"dark"},
+{id:"kaffee",name:"Kaffee",desc:"Warme Röst- und Cremetöne",colors:["#211812","#34251B","#E5B77C"],type:"dark"},
+{id:"aurora",name:"Aurora",desc:"Nordlicht in Türkis und Violett",colors:["#081820","#102B34","#55E6C1"],type:"neon"},
+{id:"lavendel",name:"Lavendel",desc:"Sanftes Violett und Flieder",colors:["#191329","#28203E","#C4A7FF"],type:"dark"},
+{id:"ember",name:"Glut",desc:"Warme Rot- und Orangetöne",colors:["#21100F","#351B1A","#FF9A72"],type:"dark"},
+{id:"arctic",name:"Arktis",desc:"Klares Eisblau",colors:["#0B1722","#142B3A","#85D9FF"],type:"dark"},
+{id:"slate",name:"Schiefer",desc:"Reduziertes Grau und Silber",colors:["#171B22","#252C36","#AAB8CF"],type:"dark"},
+{id:"candy",name:"Candy",desc:"Pink, Lila und Himmelblau",colors:["#251326","#3A1D3F","#FF86DA"],type:"neon"},
+{id:"solar",name:"Solar",desc:"Sonniges Gelb und Orange",colors:["#18170C","#2D2A15","#FFE36E"],type:"dark"},
+{id:"rose-gold",name:"Roségold",desc:"Rosé mit warmem Schimmer",colors:["#21171B","#36252D","#F5B6C9"],type:"dark"},
+{id:"mint",name:"Minze",desc:"Frisches Mintgrün",colors:["#0C1E1B","#17352E","#8FE5C0"],type:"dark"},
+{id:"ultraviolet",name:"Ultraviolett",desc:"Elektrisches Violett",colors:["#120D28","#211747","#A78BFA"],type:"dark"},
+{id:"carbon",name:"Carbon",desc:"Graphit und Türkis",colors:["#101215","#1C2128","#69D5D0"],type:"dark"},
+{id:"cobalt",name:"Kobalt",desc:"Sattes Blau und klare Kanten",colors:["#0A1428","#12284A","#78A8FF"],type:"dark"},
+{id:"peach",name:"Pfirsich",desc:"Warme, sanfte Pfirsichfarben",colors:["#281A16","#3B2922","#FFBC93"],type:"dark"},
+{id:"midnight-purple",name:"Mitternachtslila",desc:"Violette Nachtfarben",colors:["#110D1D","#211933","#C6A0FF"],type:"dark"},
+{id:"neon-green",name:"Neon-Grün",desc:"Knalliges Grün auf dunklem Grund",colors:["#07150C","#102718","#61FF8F"],type:"neon"},
+{id:"galaxy",name:"Galaxie",desc:"Sternenstaub aus Blau und Lila",colors:["#0B1020","#181C36","#C5A3FF"],type:"neon"},
+{id:"volcano",name:"Vulkan",desc:"Glühende Rot- und Orangetöne",colors:["#1F0C0C","#351515","#FF7B54"],type:"dark"},
+{id:"monochrome",name:"Monochrom",desc:"Schwarz, Weiß und Graustufen",colors:["#111111","#222222","#D0D0D0"],type:"dark"},
+{id:"bubblegum",name:"Bubblegum",desc:"Knalliges Pink und Violett",colors:["#251223","#3D1D38","#FF91D4"],type:"neon"},
+{id:"citrus",name:"Zitrus",desc:"Zitrusgrün mit frischen Akzenten",colors:["#151B09","#293213","#C6F36B"],type:"neon"},
+{id:"ice-blue",name:"Eisblau",desc:"Kühle Blau- und Cyanfarben",colors:["#0A1B28","#133044","#8CE0FF"],type:"dark"},
+{id:"coffee-light",name:"Café Creme",desc:"Helle Kaffee- und Cremetöne",colors:["#F4E9DC","#E4D2BE","#7B4B2A"],type:"light"},
+{id:"retro-wave",name:"Retro Wave",desc:"Synthwave mit Neonpink",colors:["#180F2A","#2A1B44","#FF65D4"],type:"neon"},
+{id:"ocean-light",name:"Ozean Hell",desc:"Heller Himmel und Meeresblau",colors:["#EFF8FC","#DDEFF5","#147EAA"],type:"light"},
+{id:"pride-regenbogen",name:"Pride – Regenbogen",desc:"Bunte Regenbogenfarben",colors:["#15131A","#221F2B","#FF8C00","#E40303","#FFED00","#008026","#004DFF","#750787"],type:"pride"},
+{id:"pride-trans",name:"Pride – Trans",desc:"Hellblau, Rosa und Weiß",colors:["#15131A","#221F2B","#5BCEFA","#F5A9B8","#FFFFFF"],type:"pride"},
+{id:"pride-bi",name:"Pride – Bi",desc:"Pink, Violett und Blau",colors:["#15131A","#221F2B","#D60270","#9B4F96","#0038A8"],type:"pride"},
+{id:"pride-pan",name:"Pride – Pan",desc:"Pink, Gelb und Blau",colors:["#15131A","#221F2B","#FF218C","#FFD800","#21B1FF"],type:"pride"},
+{id:"pride-lesbisch",name:"Pride – Lesbisch",desc:"Warme Sonnenuntergangsfarben",colors:["#15131A","#221F2B","#D52D00","#EF7627","#FF9A56","#FFFFFF","#B55690"],type:"pride"},
+{id:"pride-nonbinaer",name:"Pride – Nichtbinär",desc:"Gelb, Weiß, Lila und Schwarz",colors:["#15131A","#221F2B","#FCF434","#FFFFFF","#9C59D1","#2C2C2C"],type:"pride"},
+{id:"pride-asexuell",name:"Pride – Asexuell",desc:"Schwarz, Grau, Weiß und Lila",colors:["#15131A","#221F2B","#000000","#A3A3A3","#FFFFFF","#800080"],type:"pride"},
+{id:"pride-gay",name:"Pride – Gay",desc:"Grün, Weiß, Blau und Violett",colors:["#15131A","#221F2B","#078D70","#26CEAA","#FFFFFF","#5049CC","#3D1A78"],type:"pride"},
+{id:"pride-genderfluid",name:"Pride – Genderfluid",desc:"Rosa, Weiß, Lila und Blau",colors:["#15131A","#221F2B","#B57EDC","#FFFFFF","#F5A9B8","#5BCEFA"],type:"pride"},
+{id:"pride-aromantisch",name:"Pride – Aromantisch",desc:"Grün, Weiß, Grau und Schwarz",colors:["#15131A","#221F2B","#3DA542","#A7D379","#FFFFFF","#000000"],type:"pride"},
+{id:"pride-queer",name:"Pride – Queer",desc:"Bunt und selbstbestimmt",colors:["#15131A","#221F2B","#E40303","#FF8C00","#008026","#004DFF","#750787"],type:"pride"}
+];
+const grid=document.getElementById("grid"),search=document.getElementById("search"),filter=document.getElementById("filter"),count=document.getElementById("count");
+function render(){
+ const q=search.value.trim().toLocaleLowerCase("de"),f=filter.value;
+ const visible=themes.filter(t=>(!q||(t.name+" "+t.desc+" "+t.id).toLocaleLowerCase("de").includes(q))&&(f==="all"||t.type===f));
+ grid.innerHTML=visible.map(t=>'<article class="card"><div class="swatches" aria-label="Farbvorschau">'+t.colors.map(c=>'<i style="background:'+c+'"></i>').join("")+'</div><h2>'+t.name+'</h2><p>'+t.desc+'</p><a class="install" href="nexlori-theme://apply/'+t.id+'" aria-label="'+t.name+' in Nexlori aktivieren">Aktivieren ↗</a></article>').join("");
+ count.textContent=visible.length+" Themes";
+}
+search.addEventListener("input",render);filter.addEventListener("change",render);render();
+</script></body></html>
