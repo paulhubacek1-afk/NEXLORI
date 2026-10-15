@@ -253,6 +253,30 @@ _THEMES = [
           ("#2745A1", "#78A8FF", "#A9D7FF")),
     Theme("peach", "Pfirsich", "#281A16", "#3B2922", "#FFF4EC", "#FFBC93",
           ("#FFBC93", "#FF8F9C", "#FFE0B5")),
+
+    Theme("midnight-purple", "Mitternachtslila", "#110D1D", "#211933", "#F6F0FF", "#C6A0FF",
+          ("#C6A0FF", "#8E69D8", "#E8B9F3")),
+    Theme("neon-green", "Neon-Grün", "#07150C", "#102718", "#EEFFF2", "#61FF8F",
+          ("#61FF8F", "#20C878", "#B6FF6D")),
+    Theme("galaxy", "Galaxie", "#0B1020", "#181C36", "#F2F3FF", "#C5A3FF",
+          ("#C5A3FF", "#7C6BFF", "#63C8FF")),
+    Theme("volcano", "Vulkan", "#1F0C0C", "#351515", "#FFF0E8", "#FF7B54",
+          ("#FF5B5B", "#FF7B54", "#FFC078")),
+    Theme("monochrome", "Monochrom", "#111111", "#222222", "#F8F8F8", "#D0D0D0",
+          ("#555555", "#AAAAAA", "#F5F5F5")),
+    Theme("bubblegum", "Bubblegum", "#251223", "#3D1D38", "#FFF1FA", "#FF91D4",
+          ("#FF91D4", "#C28AFF", "#91D8FF")),
+    Theme("citrus", "Zitrus", "#151B09", "#293213", "#F6FFE8", "#C6F36B",
+          ("#C6F36B", "#F2E85C", "#6DE0A6")),
+    Theme("ice-blue", "Eisblau", "#0A1B28", "#133044", "#F0FAFF", "#8CE0FF",
+          ("#8CE0FF", "#D1F3FF", "#4C9AC8")),
+    Theme("coffee-light", "Café Creme", "#F4E9DC", "#E4D2BE", "#2A1D15", "#7B4B2A",
+          ("#7B4B2A", "#B77A4B", "#D9B58C")),
+    Theme("retro-wave", "Retro Wave", "#180F2A", "#2A1B44", "#FFF3FC", "#FF65D4",
+          ("#FF65D4", "#9B5CFF", "#4ECFFF")),
+    Theme("ocean-light", "Ozean Hell", "#EFF8FC", "#DDEFF5", "#172B3C", "#147EAA",
+          ("#147EAA", "#35A8C9", "#89D6E8")),
+
 ]
 BUILTIN_THEMES: dict[str, Theme] = {t.name: t for t in _THEMES}
 
