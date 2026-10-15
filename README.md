@@ -13,6 +13,7 @@ Nexlori ist ein anpassbarer Windows-Browser auf Basis von Qt WebEngine/Chromium.
 - Theme-Galerie über GitHub Pages mit direkter Theme-Aktivierung aus Nexlori.
 - Elf zusätzliche Themes und themeabhängige Windows-Titelleiste.
 - Sichtbarer Status des uBlock-Origin-Lite-Werbeblockers in der Browserleiste.
+- Cookie-Opt-out-Hilfe, Link-Bereiniger, Tab-Schläfer, Webseiten-Dunkelmodus und Tab-Mediensteuerung.
 
 - Chromium-WebEngine für moderne Websites, JavaScript, CSS, Bilder und Formulare.
 - Anpassbare Suchleiste, Icon-Größe, sichtbare Schnellzugriffe und Suchmaschine.
