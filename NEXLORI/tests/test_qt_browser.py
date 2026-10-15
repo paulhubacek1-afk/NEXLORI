@@ -46,3 +46,24 @@ def test_page_theme_is_preserved_for_every_navigation():
     disabled = build_page_theme_script(BUILTIN_THEMES["gothic"], False)
     assert "enabled:false" in disabled
     assert "old.remove()" in disabled
+
+
+def test_gallery_theme_links_only_accept_known_builtin_themes():
+    from nexlori.qt_browser import gallery_theme_slug
+
+    assert gallery_theme_slug("nexlori-theme://apply/gothic") == "gothic"
+    assert gallery_theme_slug("nexlori-theme://apply/pride-gay") == "pride-gay"
+    assert gallery_theme_slug("https://example.com/apply/gothic") is None
+    assert gallery_theme_slug("nexlori-theme://apply/does-not-exist") is None
+    assert gallery_theme_slug("nexlori-theme://other/gothic") is None
+    assert gallery_theme_slug("nexlori-theme://apply/../../settings") is None
+
+
+def test_new_gallery_themes_are_available():
+    expected = {
+        "midnight-purple", "neon-green", "galaxy", "volcano", "monochrome",
+        "bubblegum", "citrus", "ice-blue", "coffee-light", "retro-wave", "ocean-light",
+    }
+    assert expected <= set(BUILTIN_THEMES)
+    for name in expected:
+        assert BUILTIN_THEMES[name].label
