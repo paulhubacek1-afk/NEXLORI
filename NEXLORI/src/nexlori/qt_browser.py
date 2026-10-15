@@ -70,6 +70,23 @@ APP_VERSION = __version__
 FEEDBACK_EMAIL = "nexlori-browser@gmx.at"
 REPOSITORY_URL = "https://github.com/paulhubacek1-afk/NEXLORI"
 
+THEME_GALLERY_URL = "https://paulhubacek1-afk.github.io/NEXLORI/"
+
+
+def gallery_theme_slug(raw_url: str) -> str | None:
+    """Accept only gallery links for a known built-in theme; never execute remote code."""
+    try:
+        parsed = urlsplit(str(raw_url))
+    except ValueError:
+        return None
+    if parsed.scheme.lower() != "nexlori-theme" or parsed.netloc.lower() != "apply":
+        return None
+    slug = parsed.path.strip("/")
+    if not re.fullmatch(r"[a-z0-9-]{1,40}", slug):
+        return None
+    return slug if slug in BUILTIN_THEMES else None
+
+
 
 def _qt_app_icon(theme: Theme | None = None) -> QIcon:
     """Create the application icon from the active theme palette."""
@@ -208,7 +225,19 @@ class BrowserPage(QWebEnginePage):
         return view.page()
 
     def acceptNavigationRequest(self, url: QUrl, navigation_type, is_main_frame: bool) -> bool:  # noqa: N802
-        if url.scheme().lower() in {"mailto", "tel"}:
+        scheme = url.scheme().lower()
+        if scheme == "nexlori-theme":
+            slug = gallery_theme_slug(url.toString())
+            if slug:
+                self.owner.set_theme(slug)
+                self.owner.statusBar().showMessage(
+                    f"Theme „{BUILTIN_THEMES[slug].label}“ aktiviert. Es wurde keine Theme-Datei heruntergeladen.",
+                    5000,
+                )
+            else:
+                self.owner.statusBar().showMessage("Dieser Theme-Link ist ungültig oder nicht verfügbar.", 5000)
+            return False
+        if scheme in {"mailto", "tel"}:
             QDesktopServices.openUrl(url)
             return False
         return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
@@ -283,14 +312,7 @@ class NexloriWindow(QMainWindow):
         tab_row = QHBoxLayout()
         tab_row.setContentsMargins(7, 5, 7, 0)
         tab_row.setSpacing(6)
-        # The tab-opening control stays on the left; the right side contains tabs only.
-        self.new_tab_button = QToolButton(root)
-        self.new_tab_button.setText("+")
-        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
-        self.new_tab_button.setObjectName("newTabButton")
-        self.new_tab_button.clicked.connect(lambda: self.new_tab())
-        tab_row.addWidget(self.new_tab_button)
-
+        # The new-tab control sits at the far right of the upper tab strip.
         self.tabs = QTabWidget(root)
         self.tabs.setDocumentMode(True)
         self.tabs.setMovable(True)
@@ -299,6 +321,14 @@ class NexloriWindow(QMainWindow):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self._on_current_changed)
         tab_row.addWidget(self.tabs, 1)
+
+        self.new_tab_button = QToolButton(root)
+        self.new_tab_button.setText("+")
+        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
+        self.new_tab_button.setObjectName("newTabButton")
+        self.new_tab_button.clicked.connect(lambda: self.new_tab())
+        tab_row.addWidget(self.new_tab_button)
+
         tab_widget = QWidget(root)
         tab_widget.setLayout(tab_row)
         outer.addWidget(tab_widget)
@@ -341,6 +371,10 @@ class NexloriWindow(QMainWindow):
         self.page_theme_button.toggled.connect(self.toggle_page_theme)
         self.page_theme_button.setObjectName("pageThemeButton")
         nav.addWidget(self.page_theme_button)
+
+        self.adblock_button = self._tool("⛨", "Werbe- und Trackerschutz wird geprüft …", self.toggle_adblock)
+        self.adblock_button.setObjectName("adblockButton")
+        nav.addWidget(self.adblock_button)
 
         self.theme_button = self._tool("✦", "Theme auswählen", self.show_theme_menu)
         nav.addWidget(self.theme_button)
@@ -689,6 +723,7 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Downloads-Ordner öffnen", self.open_download_folder)
         self.more_menu.addAction("Webseite neu laden", self.reload_current, QKeySequence("F5"))
         self.more_menu.addAction("Theme auswählen", self.show_theme_menu)
+        self.more_menu.addAction("Theme-Galerie online öffnen", self.open_theme_gallery)
         self.more_menu.addAction("Nach Updates suchen", self.check_for_updates)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Feedback per E-Mail …", self.open_feedback_email)
@@ -754,6 +789,37 @@ QLabel {{ background:transparent; }}
         self.accent_line.setStyleSheet(f"background:{_theme_gradient(theme)};")
         self.tabs.setStyleSheet(f"QTabWidget::pane {{ border:0; background:{theme.bg}; }}")
         self.statusBar().setStyleSheet(f"QStatusBar {{ background:{theme.surface}; color:{theme.fg}; }}")
+        self._apply_native_titlebar_theme()
+        self._update_adblock_button()
+
+    def _apply_native_titlebar_theme(self) -> None:
+        """Match the native Windows caption to the active palette without a fragile frameless window."""
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            hwnd = wintypes.HWND(int(self.winId()))
+            dwmapi = ctypes.windll.dwmapi
+
+            def colorref(value: str) -> int:
+                # DWM uses COLORREF (0x00BBGGRR), unlike CSS's RGB notation.
+                r, g, b = (int(value[i:i + 2], 16) for i in (1, 3, 5))
+                return (b << 16) | (g << 8) | r
+
+            dark_mode = ctypes.c_int(1 if relative_luminance(self.theme.bg) < 0.5 else 0)
+            caption = ctypes.c_int(colorref(self.theme.bg))
+            text_color = ctypes.c_int(colorref(self.theme.fg))
+            border = ctypes.c_int(colorref(self.theme.accent))
+            for attribute, value in ((20, dark_mode), (35, caption), (36, text_color), (34, border)):
+                try:
+                    dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value))
+                except (AttributeError, OSError):
+                    continue
+        except (AttributeError, OSError, TypeError, ValueError):
+            # Older Windows builds may not support all caption attributes.
+            return
     def set_theme(self, name: str) -> None:
         if name not in BUILTIN_THEMES:
             return
@@ -1146,6 +1212,75 @@ QLabel {{ background:transparent; }}
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
+    def open_theme_gallery(self) -> None:
+        """Open the GitHub Pages theme gallery in a new Nexlori tab."""
+        self.new_tab(url=THEME_GALLERY_URL, start_page=False, activate=True)
+
+    def _update_adblock_button(self) -> None:
+        button = getattr(self, "adblock_button", None)
+        if button is None:
+            return
+        extensions = []
+        if self.extension_manager is not None:
+            try:
+                extensions = list(self.extension_manager.extensions())
+            except (AttributeError, RuntimeError):
+                extensions = []
+        blocker = next(
+            (item for item in extensions if extension_key_from_info(item) == "ublock-origin-lite"),
+            None,
+        )
+        loaded = bool(blocker and blocker.isLoaded())
+        enabled = bool(loaded and blocker.isEnabled())
+        if enabled:
+            button.setText("⛨")
+            button.setToolTip("Werbe- und Trackerschutz: aktiv · klicken zum Deaktivieren")
+            button.setStyleSheet("QToolButton#adblockButton { color: #55c878; font-weight: bold; }")
+        elif loaded:
+            button.setText("⛨")
+            button.setToolTip("Werbe- und Trackerschutz: deaktiviert · klicken zum Aktivieren")
+            button.setStyleSheet("QToolButton#adblockButton { color: #e0a34b; font-weight: bold; }")
+        else:
+            button.setText("⚠")
+            button.setToolTip("Werbeblocker ist nicht geladen · klicken, um den Zustand zu reparieren")
+            button.setStyleSheet("QToolButton#adblockButton { color: #e05d5d; font-weight: bold; }")
+
+    def toggle_adblock(self) -> None:
+        """Toggle uBlock Origin Lite only when its installed extension is loaded."""
+        if self.extension_manager is None:
+            QMessageBox.warning(
+                self, "Werbeblocker nicht verfügbar",
+                "Dieser Build unterstützt keine Chromium-Erweiterungen. Verwende einen aktuellen Nexlori-Build.",
+            )
+            return
+        try:
+            extensions = list(self.extension_manager.extensions())
+        except (AttributeError, RuntimeError):
+            extensions = []
+        blocker = next(
+            (item for item in extensions if extension_key_from_info(item) == "ublock-origin-lite"),
+            None,
+        )
+        if blocker is None or not blocker.isLoaded():
+            self.settings.ubol_enabled = True
+            self.settings.extensions_enabled["ublock-origin-lite"] = True
+            self._save_settings()
+            self._ensure_default_extension()
+            self._update_adblock_button()
+            return
+        self.settings.ubol_enabled = not bool(blocker.isEnabled())
+        self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
+        self._save_settings()
+        try:
+            self.extension_manager.setExtensionEnabled(blocker, self.settings.ubol_enabled)
+        except (AttributeError, RuntimeError) as exc:
+            QMessageBox.warning(self, "Werbeblocker", f"Der Status konnte nicht geändert werden: {exc}")
+        QTimer.singleShot(250, self._update_adblock_button)
+        self.statusBar().showMessage(
+            "Werbe- und Trackerschutz " + ("aktiviert." if self.settings.ubol_enabled else "deaktiviert."),
+            3500,
+        )
+
     def _ensure_default_extension(self) -> None:
         """Install the bundled official uBlock Origin Lite package for a fresh profile."""
         if self.extension_manager is None:
@@ -1164,13 +1299,15 @@ QLabel {{ background:transparent; }}
         )
         if installed:
             self._sync_extension_states()
+            QTimer.singleShot(250, self._update_adblock_button)
             return
         package = bundled_ubolite_path()
         if package is None:
             self.statusBar().showMessage(
-                "uBlock Origin Lite fehlt in diesem Build. Du kannst ein MV3-Add-on manuell installieren.",
-                7000,
+                "uBlock Origin Lite fehlt in diesem Build. Der Werbeblocker ist derzeit nicht aktiv.",
+                8000,
             )
+            self._update_adblock_button()
             return
         try:
             # Qt WebEngine's extension API accepts an unpacked extension directory,
@@ -1178,8 +1315,9 @@ QLabel {{ background:transparent; }}
             # archive into the persistent profile before calling the native API.
             extension_dir = self.storage_dir / "extensions" / "ublock-origin-lite"
             unpacked = unpack_extension_package(package, extension_dir)
-            self.statusBar().showMessage("uBlock Origin Lite wird zum ersten Mal eingerichtet …", 6000)
+            self.statusBar().showMessage("uBlock Origin Lite wird eingerichtet …", 6000)
             self.extension_manager.installExtension(str(unpacked))
+            QTimer.singleShot(1500, self._update_adblock_button)
         except Exception as exc:  # noqa: BLE001
             self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
 
@@ -1239,7 +1377,9 @@ QLabel {{ background:transparent; }}
                 if bool(extension.isEnabled()) != enabled:
                     self.extension_manager.setExtensionEnabled(extension, enabled)
         except (AttributeError, RuntimeError):
+            self._update_adblock_button()
             return
+        QTimer.singleShot(100, self._update_adblock_button)
 
     def set_extension_enabled(self, extension, enabled: bool) -> None:
         if self.extension_manager is None:
@@ -1349,6 +1489,9 @@ QLabel {{ background:transparent; }}
         self.settings.search_url = str(search_engine.currentData())
         self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
         self._refresh_page_theme_script()
+        if self.settings.ubol_enabled:
+            QTimer.singleShot(0, self._ensure_default_extension)
+        QTimer.singleShot(100, self._update_adblock_button)
         self._sync_extension_states()
         self._save_settings()
         for index in range(self.tabs.count()):
