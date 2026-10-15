@@ -33,6 +33,11 @@ class Settings:
     search_url: str = "https://html.duckduckgo.com/html/?q={}"  # {} wird durch die Suchanfrage ersetzt
     page_zoom: float = 1.0  # zusätzlich zur Bildschirmskalierung
     adapt_page_theme: bool = False  # standardmäßig kein CSS-Eingriff in fremde Websites
+    cookie_banner_cleanup: bool = True  # lehnt nur eindeutig beschriftete Ablehnen-Optionen ab
+    clean_tracking_parameters: bool = True
+    dark_mode_websites: bool = False
+    tab_sleep_enabled: bool = True
+    tab_sleep_after_minutes: int = 10
     pride_favorites: list[str] = field(default_factory=lambda: ["pride-gay", "pride-trans", "pride-regenbogen"])
     toolbar_search_width: int = 560
     toolbar_icon_size: int = 18
@@ -74,6 +79,11 @@ class Settings:
             out.append("page_zoom: zwischen 0.5 und 3.0 erwartet")
         if not isinstance(self.adapt_page_theme, bool):
             out.append("adapt_page_theme: true oder false erwartet")
+        for field_name in ("cookie_banner_cleanup", "clean_tracking_parameters", "dark_mode_websites", "tab_sleep_enabled"):
+            if not isinstance(getattr(self, field_name), bool):
+                out.append(f"{field_name}: true oder false erwartet")
+        if not isinstance(self.tab_sleep_after_minutes, int) or not 1 <= self.tab_sleep_after_minutes <= 120:
+            out.append("tab_sleep_after_minutes: zwischen 1 und 120 Minuten erwartet")
         if not isinstance(self.pride_favorites, list) or len(self.pride_favorites) > 3:
             out.append("pride_favorites: höchstens drei Theme-Namen erwartet")
         elif any(not isinstance(name, str) or not name.startswith("pride-") or name not in BUILTIN_THEMES for name in self.pride_favorites):
