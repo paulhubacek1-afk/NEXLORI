@@ -126,7 +126,7 @@ if (action === 'toggle') {{
 }}
 if (action === 'seek') {{
   for (const m of media) {{
-    if (Number.isFinite(m.duration)) m.currentTime = Math.max(0, Math.min(m.duration, m.currentTime + (${amount})));
+    if (Number.isFinite(m.duration)) m.currentTime = Math.max(0, Math.min(m.duration, m.currentTime + ({amount})));
   }}
 }}
 return JSON.stringify({{ok:true, playing:media.some(m => !m.paused && !m.ended), count:media.length}});
