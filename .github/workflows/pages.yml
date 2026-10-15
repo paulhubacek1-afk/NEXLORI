@@ -1,0 +1,37 @@
+name: Nexlori Theme-Galerie
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+      - name: GitHub Pages konfigurieren
+        uses: actions/configure-pages@v5
+      - name: Galerie bereitstellen
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - name: Veröffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4
