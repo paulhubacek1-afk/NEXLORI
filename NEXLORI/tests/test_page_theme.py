@@ -55,3 +55,16 @@ def test_settings_accept_up_to_three_additional_themes():
     assert not settings.problems()
     settings.theme_mix.append("gothic")
     assert any("theme_mix" in problem for problem in settings.problems())
+
+
+
+def test_new_privacy_settings_have_sensible_defaults_and_validate():
+    settings = Settings()
+    assert settings.cookie_banner_cleanup is True
+    assert settings.clean_tracking_parameters is True
+    assert settings.tab_sleep_enabled is True
+    assert settings.tab_sleep_after_minutes == 10
+    assert settings.dark_mode_websites is False
+    assert not settings.problems()
+    settings.tab_sleep_after_minutes = 0
+    assert any("tab_sleep_after_minutes" in issue for issue in settings.problems())

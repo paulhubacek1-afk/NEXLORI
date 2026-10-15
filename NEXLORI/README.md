@@ -4,7 +4,7 @@
 
 Nexlori soll nicht einfach ein anderer Browser mit neuem Logo sein. Die Idee ist ein Browser mit eigener Identität, einer ruhigen und anpassbaren Oberfläche und Funktionen, die Rücksicht auf RAM, CPU, Akku und Datenverbrauch nehmen.
 
-> **Projektstand:** Nexlori 1.0.0 ist die erste offizielle Windows-Version auf Basis von Qt WebEngine 6.10+/Chromium. Sie enthält eine anpassbare Browserleiste, einstellbare Website-Themes, uBlock Origin Lite, einen MV3-Add-on-Manager, Spotify-Mini-Player, verschlüsselten Passwort-Tresor, Einstellungen und einen Update-Mechanismus. Der Build durchläuft automatische Tests und einen Windows-EXE-Selbsttest. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
+> **Projektstand:** Nexlori 1.1.0 ist die erste offizielle Windows-Version auf Basis von Qt WebEngine 6.10+/Chromium. Sie enthält eine anpassbare Browserleiste, einstellbare Website-Themes, uBlock Origin Lite, einen MV3-Add-on-Manager, Spotify-Mini-Player, verschlüsselten Passwort-Tresor, Einstellungen und einen Update-Mechanismus. Der Build durchläuft automatische Tests und einen Windows-EXE-Selbsttest. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
 
 ## Die Grundidee
 
@@ -147,6 +147,19 @@ Die Reihenfolge kann sich während der Entwicklung ändern. Sicherheit und eine 
 Ideen, Fehlerberichte und Verbesserungsvorschläge sind willkommen. Bitte kennzeichne in Vorschlägen klar, ob es um eine bereits vorhandene Funktion oder um einen zukünftigen Wunsch geht.
 
 **Nexlori – dein Browser, deine Ressourcen, dein Stil.**
+
+### Theme-Galerie
+
+Die [Nexlori-Theme-Galerie](https://paulhubacek1-afk.github.io/NEXLORI/) wird über GitHub Pages bereitgestellt. In Nexlori lässt sie sich im Drei-Punkte-Menü öffnen. Der Aktivieren-Schalter übernimmt die ausgewählte eingebaute Palette direkt im Browser. Es wird keine Theme-Datei in den Downloads-Ordner kopiert.
+
+### Datenschutz und Ressourcen
+
+- **Cookie-Banner:** Die optionale automatische Hilfe klickt nur klar erkennbare Ablehnen- oder „nur notwendige Cookies“-Schaltflächen. Wenn eine Seite keine solche Option zeigt, verändert Nexlori die Einwilligung nicht.
+- **Link-Bereiniger:** Entfernt bekannte Tracking-Parameter wie `utm_*`, `fbclid` und `gclid` aus eingegebenen URLs und angeklickten Links.
+- **Tab-Schläfer:** Friert untätige Hintergrund-Tabs nach einer einstellbaren Wartezeit ein, sofern Qt den Zustand empfiehlt. Tabs mit kürzlich abgespieltem Audio werden geschont; beim Wechsel wird ein Tab wieder aktiviert.
+- **Webseiten-Dunkelmodus:** Nutzt den eingebauten Chromium-Force-Dark-Modus. Einzelne Webseiten können dadurch anders aussehen.
+- **Mediensteuerung:** Im Mini-Player kann Nexlori HTML-Audio und -Video aus dem aktiven Tab steuern. Nicht jede Webseite stellt ihre Medien auf eine Weise bereit, die sich extern kontrollieren lässt.
+- **Autoplay:** Medienwiedergabe kann eine Nutzeraktion erfordern.
 
 ### Webseiten-Themes
 

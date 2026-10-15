@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -64,12 +65,15 @@ from .extension_utils import (
     is_builtin_extension,
   )
 from .page_theme import build_page_theme_script
+from .page_features import build_cookie_banner_script, clean_tracking_url
+from .theme_gallery import gallery_theme_slug
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
 FEEDBACK_EMAIL = "nexlori-browser@gmx.at"
 REPOSITORY_URL = "https://github.com/paulhubacek1-afk/NEXLORI"
 
+THEME_GALLERY_URL = "https://paulhubacek1-afk.github.io/NEXLORI/"
 
 def _qt_app_icon(theme: Theme | None = None) -> QIcon:
     """Create the application icon from the active theme palette."""
@@ -208,7 +212,34 @@ class BrowserPage(QWebEnginePage):
         return view.page()
 
     def acceptNavigationRequest(self, url: QUrl, navigation_type, is_main_frame: bool) -> bool:  # noqa: N802
-        if url.scheme().lower() in {"mailto", "tel"}:
+        scheme = url.scheme().lower()
+        if scheme == "nexlori-theme":
+            slug = gallery_theme_slug(url.toString())
+            if slug:
+                self.owner.set_theme(slug)
+                self.owner.statusBar().showMessage(
+                    f"Theme „{BUILTIN_THEMES[slug].label}“ aktiviert. Es wurde keine Theme-Datei heruntergeladen.",
+                    5000,
+                )
+            else:
+                self.owner.statusBar().showMessage("Dieser Theme-Link ist ungültig oder nicht verfügbar.", 5000)
+            return False
+        if (
+            scheme in {"http", "https"}
+            and self.owner.settings.clean_tracking_parameters
+            and navigation_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked
+        ):
+            original = url.toString()
+            cleaned = clean_tracking_url(original)
+            if cleaned != original:
+                target_view = self.parent()
+                if not isinstance(target_view, QWebEngineView):
+                    target_view = self.owner.current_view()
+                if target_view is not None:
+                    QTimer.singleShot(0, lambda view=target_view, target=cleaned: self.owner.navigate_view(view, target))
+                    self.owner.statusBar().showMessage("Tracking-Parameter aus dem Link entfernt.", 3000)
+                return False
+        if scheme in {"mailto", "tel"}:
             QDesktopServices.openUrl(url)
             return False
         return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
@@ -248,7 +279,9 @@ class NexloriWindow(QMainWindow):
         self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
         self.profile.downloadRequested.connect(self._download_requested)
         self._page_theme_script = None
+        self._cookie_cleanup_script = None
         self._refresh_page_theme_script()
+        self._refresh_cookie_cleanup_script()
         try:
             self.extension_manager = self.profile.extensionManager()
             self.extension_manager.installFinished.connect(self._on_extension_installed)
@@ -263,6 +296,10 @@ class NexloriWindow(QMainWindow):
         self._build_ui()
         self._apply_browser_theme()
         self._bind_shortcuts()
+        self._tab_sleep_timer = QTimer(self)
+        self._tab_sleep_timer.setInterval(15000)
+        self._tab_sleep_timer.timeout.connect(self._sleep_inactive_tabs)
+        self._tab_sleep_timer.start()
         view = self.new_tab(start_page=start_url is None, activate=True)
         if start_url:
             self.navigate_view(view, start_url)
@@ -283,14 +320,7 @@ class NexloriWindow(QMainWindow):
         tab_row = QHBoxLayout()
         tab_row.setContentsMargins(7, 5, 7, 0)
         tab_row.setSpacing(6)
-        # The tab-opening control stays on the left; the right side contains tabs only.
-        self.new_tab_button = QToolButton(root)
-        self.new_tab_button.setText("+")
-        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
-        self.new_tab_button.setObjectName("newTabButton")
-        self.new_tab_button.clicked.connect(lambda: self.new_tab())
-        tab_row.addWidget(self.new_tab_button)
-
+        # The new-tab control sits at the far right of the upper tab strip.
         self.tabs = QTabWidget(root)
         self.tabs.setDocumentMode(True)
         self.tabs.setMovable(True)
@@ -299,6 +329,14 @@ class NexloriWindow(QMainWindow):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self._on_current_changed)
         tab_row.addWidget(self.tabs, 1)
+
+        self.new_tab_button = QToolButton(root)
+        self.new_tab_button.setText("+")
+        self.new_tab_button.setToolTip("Neuer Tab (Strg+T)")
+        self.new_tab_button.setObjectName("newTabButton")
+        self.new_tab_button.clicked.connect(lambda: self.new_tab())
+        tab_row.addWidget(self.new_tab_button)
+
         tab_widget = QWidget(root)
         tab_widget.setLayout(tab_row)
         outer.addWidget(tab_widget)
@@ -341,6 +379,10 @@ class NexloriWindow(QMainWindow):
         self.page_theme_button.toggled.connect(self.toggle_page_theme)
         self.page_theme_button.setObjectName("pageThemeButton")
         nav.addWidget(self.page_theme_button)
+
+        self.adblock_button = self._tool("⛨", "Werbe- und Trackerschutz wird geprüft …", self.toggle_adblock)
+        self.adblock_button.setObjectName("adblockButton")
+        nav.addWidget(self.adblock_button)
 
         self.theme_button = self._tool("✦", "Theme auswählen", self.show_theme_menu)
         nav.addWidget(self.theme_button)
@@ -689,6 +731,7 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Downloads-Ordner öffnen", self.open_download_folder)
         self.more_menu.addAction("Webseite neu laden", self.reload_current, QKeySequence("F5"))
         self.more_menu.addAction("Theme auswählen", self.show_theme_menu)
+        self.more_menu.addAction("Theme-Galerie online öffnen", self.open_theme_gallery)
         self.more_menu.addAction("Nach Updates suchen", self.check_for_updates)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Feedback per E-Mail …", self.open_feedback_email)
@@ -754,6 +797,37 @@ QLabel {{ background:transparent; }}
         self.accent_line.setStyleSheet(f"background:{_theme_gradient(theme)};")
         self.tabs.setStyleSheet(f"QTabWidget::pane {{ border:0; background:{theme.bg}; }}")
         self.statusBar().setStyleSheet(f"QStatusBar {{ background:{theme.surface}; color:{theme.fg}; }}")
+        self._apply_native_titlebar_theme()
+        self._update_adblock_button()
+
+    def _apply_native_titlebar_theme(self) -> None:
+        """Match the native Windows caption to the active palette without a fragile frameless window."""
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            hwnd = wintypes.HWND(int(self.winId()))
+            dwmapi = ctypes.windll.dwmapi
+
+            def colorref(value: str) -> int:
+                # DWM uses COLORREF (0x00BBGGRR), unlike CSS's RGB notation.
+                r, g, b = (int(value[i:i + 2], 16) for i in (1, 3, 5))
+                return (b << 16) | (g << 8) | r
+
+            dark_mode = ctypes.c_int(1 if relative_luminance(self.theme.bg) < 0.5 else 0)
+            caption = ctypes.c_int(colorref(self.theme.bg))
+            text_color = ctypes.c_int(colorref(self.theme.fg))
+            border = ctypes.c_int(colorref(self.theme.accent))
+            for attribute, value in ((20, dark_mode), (35, caption), (36, text_color), (34, border)):
+                try:
+                    dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value))
+                except (AttributeError, OSError):
+                    continue
+        except (AttributeError, OSError, TypeError, ValueError):
+            # Older Windows builds may not support all caption attributes.
+            return
     def set_theme(self, name: str) -> None:
         if name not in BUILTIN_THEMES:
             return
@@ -783,6 +857,23 @@ QLabel {{ background:transparent; }}
 
     def _build_page_theme_script(self, enabled: bool) -> str:
         return build_page_theme_script(self.theme, enabled)
+
+    def _refresh_cookie_cleanup_script(self) -> None:
+        """Register a narrowly scoped cookie-banner opt-out helper for future page documents."""
+        scripts = self.profile.scripts()
+        if self._cookie_cleanup_script is not None:
+            try:
+                scripts.remove(self._cookie_cleanup_script)
+            except (RuntimeError, TypeError):
+                pass
+        script = QWebEngineScript()
+        script.setName("NexloriCookieBannerOptOut")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setRunsOnSubFrames(True)
+        script.setSourceCode(build_cookie_banner_script(self.settings.cookie_banner_cleanup))
+        scripts.insert(script)
+        self._cookie_cleanup_script = script
 
     def _refresh_page_theme_script(self) -> None:
         """Apply the selected stylesheet automatically to each newly created page document."""
@@ -833,7 +924,16 @@ QLabel {{ background:transparent; }}
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True)
+        view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture,
+            self.settings.autoplay == "block",
+        )
+        view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.ForceDarkMode,
+            self.settings.dark_mode_websites,
+        )
         view.setZoomFactor(self.settings.page_zoom)
+        view._nexlori_inactive_since = None
         view.page().setBackgroundColor(self._qt_color(self.theme.bg))
         view.titleChanged.connect(lambda title, w=view: self._update_tab_title(w, title))
         view.urlChanged.connect(lambda url, w=view: self._on_url_changed(w, url))
@@ -864,6 +964,50 @@ QLabel {{ background:transparent; }}
         view = self.tabs.currentWidget()
         return view if isinstance(view, QWebEngineView) else None
 
+    def _sleep_inactive_tabs(self) -> None:
+        """Freeze idle background pages after a delay, respecting Chromium's recommended state."""
+        if not self.settings.tab_sleep_enabled or not hasattr(self, "tabs"):
+            return
+        now = time.monotonic()
+        threshold = max(1, int(self.settings.tab_sleep_after_minutes)) * 60
+        current = self.current_view()
+        for index in range(self.tabs.count()):
+            view = self.tabs.widget(index)
+            if not isinstance(view, QWebEngineView):
+                continue
+            page = view.page()
+            if view is current:
+                try:
+                    if page.lifecycleState() != QWebEnginePage.LifecycleState.Active:
+                        page.setLifecycleState(QWebEnginePage.LifecycleState.Active)
+                    view._nexlori_inactive_since = None
+                    self.tabs.setTabToolTip(index, "")
+                except (AttributeError, RuntimeError):
+                    pass
+                continue
+            if page.isLoading():
+                view._nexlori_inactive_since = None
+                continue
+            if bool(getattr(page, "recentlyAudible", lambda: False)()):
+                view._nexlori_inactive_since = None
+                self.tabs.setTabToolTip(index, "Energiesparmodus pausiert, weil dieser Tab kürzlich Audio abgespielt hat.")
+                continue
+            if getattr(view, "_nexlori_inactive_since", None) is None:
+                view._nexlori_inactive_since = now
+                continue
+            if now - view._nexlori_inactive_since < threshold:
+                continue
+            try:
+                lifecycle = QWebEnginePage.LifecycleState
+                recommended = page.recommendedState()
+                # Freeze only when Qt itself says a state below Active is safe.
+                if recommended in (lifecycle.Frozen, lifecycle.Discarded) and page.lifecycleState() == lifecycle.Active:
+                    page.setLifecycleState(lifecycle.Frozen)
+                    self.tabs.setTabToolTip(index, f"Tab im Energiesparmodus · wird beim Öffnen fortgesetzt")
+            except (AttributeError, RuntimeError):
+                # Older Qt/WebEngine builds simply keep the tab active.
+                continue
+
     def close_tab(self, index: int) -> None:
         if index < 0 or index >= self.tabs.count():
             return
@@ -878,9 +1022,19 @@ QLabel {{ background:transparent; }}
     def _on_current_changed(self, _index: int) -> None:
         view = self.current_view()
         if view:
+            try:
+                page = view.page()
+                active = QWebEnginePage.LifecycleState.Active
+                if page.lifecycleState() != active:
+                    page.setLifecycleState(active)
+                view._nexlori_inactive_since = None
+                self.tabs.setTabToolTip(self.tabs.currentIndex(), "")
+            except (AttributeError, RuntimeError):
+                pass
             self._on_url_changed(view, view.url())
             self._update_bookmark_button()
         self._update_navigation_state()
+        self._sleep_inactive_tabs()
 
     def _update_tab_title(self, view: QWebEngineView, title: str) -> None:
         index = self.tabs.indexOf(view)
@@ -962,6 +1116,11 @@ QLabel {{ background:transparent; }}
             self.go_home()
             return
         target = normalize_input(text, self.settings.search_url)
+        if self.settings.clean_tracking_parameters:
+            cleaned = clean_tracking_url(target)
+            if cleaned != target:
+                target = cleaned
+                self.statusBar().showMessage("Tracking-Parameter aus der Adresse entfernt.", 3000)
         scheme = urlsplit(target).scheme.lower()
         if scheme in {"javascript", "data", "vbscript"}:
             self.statusBar().showMessage("Dieses Adressschema wird aus Sicherheitsgründen nicht direkt geöffnet.", 4500)
@@ -1146,6 +1305,75 @@ QLabel {{ background:transparent; }}
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
+    def open_theme_gallery(self) -> None:
+        """Open the GitHub Pages theme gallery in a new Nexlori tab."""
+        self.new_tab(url=THEME_GALLERY_URL, start_page=False, activate=True)
+
+    def _update_adblock_button(self) -> None:
+        button = getattr(self, "adblock_button", None)
+        if button is None:
+            return
+        extensions = []
+        if self.extension_manager is not None:
+            try:
+                extensions = list(self.extension_manager.extensions())
+            except (AttributeError, RuntimeError):
+                extensions = []
+        blocker = next(
+            (item for item in extensions if extension_key_from_info(item) == "ublock-origin-lite"),
+            None,
+        )
+        loaded = bool(blocker and blocker.isLoaded())
+        enabled = bool(loaded and blocker.isEnabled())
+        if enabled:
+            button.setText("⛨")
+            button.setToolTip("Werbe- und Trackerschutz: aktiv · klicken zum Deaktivieren")
+            button.setStyleSheet("QToolButton#adblockButton { color: #55c878; font-weight: bold; }")
+        elif loaded:
+            button.setText("⛨")
+            button.setToolTip("Werbe- und Trackerschutz: deaktiviert · klicken zum Aktivieren")
+            button.setStyleSheet("QToolButton#adblockButton { color: #e0a34b; font-weight: bold; }")
+        else:
+            button.setText("⚠")
+            button.setToolTip("Werbeblocker ist nicht geladen · klicken, um den Zustand zu reparieren")
+            button.setStyleSheet("QToolButton#adblockButton { color: #e05d5d; font-weight: bold; }")
+
+    def toggle_adblock(self) -> None:
+        """Toggle uBlock Origin Lite only when its installed extension is loaded."""
+        if self.extension_manager is None:
+            QMessageBox.warning(
+                self, "Werbeblocker nicht verfügbar",
+                "Dieser Build unterstützt keine Chromium-Erweiterungen. Verwende einen aktuellen Nexlori-Build.",
+            )
+            return
+        try:
+            extensions = list(self.extension_manager.extensions())
+        except (AttributeError, RuntimeError):
+            extensions = []
+        blocker = next(
+            (item for item in extensions if extension_key_from_info(item) == "ublock-origin-lite"),
+            None,
+        )
+        if blocker is None or not blocker.isLoaded():
+            self.settings.ubol_enabled = True
+            self.settings.extensions_enabled["ublock-origin-lite"] = True
+            self._save_settings()
+            self._ensure_default_extension()
+            self._update_adblock_button()
+            return
+        self.settings.ubol_enabled = not bool(blocker.isEnabled())
+        self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
+        self._save_settings()
+        try:
+            self.extension_manager.setExtensionEnabled(blocker, self.settings.ubol_enabled)
+        except (AttributeError, RuntimeError) as exc:
+            QMessageBox.warning(self, "Werbeblocker", f"Der Status konnte nicht geändert werden: {exc}")
+        QTimer.singleShot(250, self._update_adblock_button)
+        self.statusBar().showMessage(
+            "Werbe- und Trackerschutz " + ("aktiviert." if self.settings.ubol_enabled else "deaktiviert."),
+            3500,
+        )
+
     def _ensure_default_extension(self) -> None:
         """Install the bundled official uBlock Origin Lite package for a fresh profile."""
         if self.extension_manager is None:
@@ -1164,13 +1392,15 @@ QLabel {{ background:transparent; }}
         )
         if installed:
             self._sync_extension_states()
+            QTimer.singleShot(250, self._update_adblock_button)
             return
         package = bundled_ubolite_path()
         if package is None:
             self.statusBar().showMessage(
-                "uBlock Origin Lite fehlt in diesem Build. Du kannst ein MV3-Add-on manuell installieren.",
-                7000,
+                "uBlock Origin Lite fehlt in diesem Build. Der Werbeblocker ist derzeit nicht aktiv.",
+                8000,
             )
+            self._update_adblock_button()
             return
         try:
             # Qt WebEngine's extension API accepts an unpacked extension directory,
@@ -1178,8 +1408,9 @@ QLabel {{ background:transparent; }}
             # archive into the persistent profile before calling the native API.
             extension_dir = self.storage_dir / "extensions" / "ublock-origin-lite"
             unpacked = unpack_extension_package(package, extension_dir)
-            self.statusBar().showMessage("uBlock Origin Lite wird zum ersten Mal eingerichtet …", 6000)
+            self.statusBar().showMessage("uBlock Origin Lite wird eingerichtet …", 6000)
             self.extension_manager.installExtension(str(unpacked))
+            QTimer.singleShot(1500, self._update_adblock_button)
         except Exception as exc:  # noqa: BLE001
             self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
 
@@ -1239,7 +1470,9 @@ QLabel {{ background:transparent; }}
                 if bool(extension.isEnabled()) != enabled:
                     self.extension_manager.setExtensionEnabled(extension, enabled)
         except (AttributeError, RuntimeError):
+            self._update_adblock_button()
             return
+        QTimer.singleShot(100, self._update_adblock_button)
 
     def set_extension_enabled(self, extension, enabled: bool) -> None:
         if self.extension_manager is None:
@@ -1287,6 +1520,20 @@ QLabel {{ background:transparent; }}
         updates.setChecked(self.settings.auto_update_check)
         popups = QCheckBox("Website-Pop-ups und neue Fenster erlauben", dialog)
         popups.setChecked(self.settings.allow_web_popups)
+        cookie_cleanup = QCheckBox("Cookie-Banner automatisch ablehnen (nur eindeutige Ablehnen-Schaltflächen)", dialog)
+        cookie_cleanup.setChecked(self.settings.cookie_banner_cleanup)
+        clean_links = QCheckBox("Tracking-Parameter aus URLs entfernen (utm_*, fbclid usw.)", dialog)
+        clean_links.setChecked(self.settings.clean_tracking_parameters)
+        dark_websites = QCheckBox("Webseiten im erzwungenen Dunkelmodus anzeigen", dialog)
+        dark_websites.setChecked(self.settings.dark_mode_websites)
+        autoplay_block = QCheckBox("Audio und Videos erst nach einer Nutzeraktion abspielen", dialog)
+        autoplay_block.setChecked(self.settings.autoplay == "block")
+        tab_sleep = QCheckBox("Inaktive Tabs automatisch in den Energiesparmodus versetzen", dialog)
+        tab_sleep.setChecked(self.settings.tab_sleep_enabled)
+        tab_sleep_after = QSpinBox(dialog)
+        tab_sleep_after.setRange(1, 120)
+        tab_sleep_after.setSuffix(" Minuten")
+        tab_sleep_after.setValue(self.settings.tab_sleep_after_minutes)
 
         zoom = QDoubleSpinBox(dialog)
         zoom.setRange(0.5, 3.0)
@@ -1315,6 +1562,12 @@ QLabel {{ background:transparent; }}
         search_engine.setCurrentIndex(max(0, selected))
 
         form.addRow("Website-Farben", theme_css)
+        form.addRow("Webseiten-Dunkelmodus", dark_websites)
+        form.addRow("Cookie-Banner", cookie_cleanup)
+        form.addRow("Link-Bereiniger", clean_links)
+        form.addRow("Medien-Autoplay", autoplay_block)
+        form.addRow("Tab-Schläfer", tab_sleep)
+        form.addRow("Tab nach", tab_sleep_after)
         form.addRow("Werbe- und Trackerschutz", ubol)
         form.addRow("Updates", updates)
         form.addRow("Pop-ups", popups)
@@ -1345,17 +1598,43 @@ QLabel {{ background:transparent; }}
         self.settings.ubol_enabled = ubol.isChecked()
         self.settings.auto_update_check = updates.isChecked()
         self.settings.allow_web_popups = popups.isChecked()
+        self.settings.cookie_banner_cleanup = cookie_cleanup.isChecked()
+        self.settings.clean_tracking_parameters = clean_links.isChecked()
+        self.settings.dark_mode_websites = dark_websites.isChecked()
+        self.settings.autoplay = "block" if autoplay_block.isChecked() else "allow"
+        self.settings.tab_sleep_enabled = tab_sleep.isChecked()
+        self.settings.tab_sleep_after_minutes = int(tab_sleep_after.value())
         self.settings.page_zoom = float(zoom.value())
         self.settings.search_url = str(search_engine.currentData())
         self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
         self._refresh_page_theme_script()
+        self._refresh_cookie_cleanup_script()
+        for tab_index in range(self.tabs.count()):
+            tab_view = self.tabs.widget(tab_index)
+            if isinstance(tab_view, QWebEngineView):
+                tab_view.page().runJavaScript(
+                    build_cookie_banner_script(self.settings.cookie_banner_cleanup)
+                )
+        if self.settings.ubol_enabled:
+            QTimer.singleShot(0, self._ensure_default_extension)
+        QTimer.singleShot(100, self._update_adblock_button)
         self._sync_extension_states()
         self._save_settings()
         for index in range(self.tabs.count()):
             view = self.tabs.widget(index)
             if isinstance(view, QWebEngineView):
                 view.setZoomFactor(self.settings.page_zoom)
+                view.settings().setAttribute(
+                    QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture,
+                    self.settings.autoplay == "block",
+                )
+                view.settings().setAttribute(
+                    QWebEngineSettings.WebAttribute.ForceDarkMode,
+                    self.settings.dark_mode_websites,
+                )
                 self.apply_page_theme(view)
+        self._sleep_inactive_tabs()
+        self._save_settings()
         self.statusBar().showMessage("Einstellungen gespeichert.", 3000)
 
     def show_spotify_popup(self) -> None:
