@@ -1609,11 +1609,12 @@ QLabel {{ background:transparent; }}
         self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
         self._refresh_page_theme_script()
         self._refresh_cookie_cleanup_script()
-        if self.settings.cookie_banner_cleanup:
-            for tab_index in range(self.tabs.count()):
-                tab_view = self.tabs.widget(tab_index)
-                if isinstance(tab_view, QWebEngineView):
-                    tab_view.page().runJavaScript(build_cookie_banner_script(True))
+        for tab_index in range(self.tabs.count()):
+            tab_view = self.tabs.widget(tab_index)
+            if isinstance(tab_view, QWebEngineView):
+                tab_view.page().runJavaScript(
+                    build_cookie_banner_script(self.settings.cookie_banner_cleanup)
+                )
         if self.settings.ubol_enabled:
             QTimer.singleShot(0, self._ensure_default_extension)
         QTimer.singleShot(100, self._update_adblock_button)
