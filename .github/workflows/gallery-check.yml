@@ -1,0 +1,26 @@
+name: Theme-Galerie prüfen
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+      - ".github/workflows/gallery-check.yml"
+
+jobs:
+  check-gallery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: HTML-Datei und Theme-Links prüfen
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("docs/index.html").read_text(encoding="utf-8")
+          assert '<html lang="de">' in html
+          assert 'nexlori-theme://apply/gothic' in html
+          assert 'nexlori-theme://apply/midnight-purple' in html
+          assert 'id="search"' in html and 'id="filter"' in html
+          assert 'prefers-reduced-motion' in html
+          print("Theme-Galerie-Struktur und Installationslinks OK")
+          PY
