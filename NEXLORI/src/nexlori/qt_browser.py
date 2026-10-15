@@ -64,6 +64,7 @@ from .extension_utils import (
     is_builtin_extension,
   )
 from .page_theme import build_page_theme_script
+from .theme_gallery import gallery_theme_slug
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
@@ -71,22 +72,6 @@ FEEDBACK_EMAIL = "nexlori-browser@gmx.at"
 REPOSITORY_URL = "https://github.com/paulhubacek1-afk/NEXLORI"
 
 THEME_GALLERY_URL = "https://paulhubacek1-afk.github.io/NEXLORI/"
-
-
-def gallery_theme_slug(raw_url: str) -> str | None:
-    """Accept only gallery links for a known built-in theme; never execute remote code."""
-    try:
-        parsed = urlsplit(str(raw_url))
-    except ValueError:
-        return None
-    if parsed.scheme.lower() != "nexlori-theme" or parsed.netloc.lower() != "apply":
-        return None
-    slug = parsed.path.strip("/")
-    if not re.fullmatch(r"[a-z0-9-]{1,40}", slug):
-        return None
-    return slug if slug in BUILTIN_THEMES else None
-
-
 
 def _qt_app_icon(theme: Theme | None = None) -> QIcon:
     """Create the application icon from the active theme palette."""
