@@ -49,7 +49,7 @@ def test_page_theme_is_preserved_for_every_navigation():
 
 
 def test_gallery_theme_links_only_accept_known_builtin_themes():
-    from nexlori.qt_browser import gallery_theme_slug
+    from nexlori.theme_gallery import gallery_theme_slug
 
     assert gallery_theme_slug("nexlori-theme://apply/gothic") == "gothic"
     assert gallery_theme_slug("nexlori-theme://apply/pride-gay") == "pride-gay"
