@@ -4,7 +4,7 @@
 
 Nexlori soll nicht einfach ein anderer Browser mit neuem Logo sein. Die Idee ist ein Browser mit eigener Identität, einer ruhigen und anpassbaren Oberfläche und Funktionen, die Rücksicht auf RAM, CPU, Akku und Datenverbrauch nehmen.
 
-> **Projektstand:** Nexlori 1.0.0 ist die erste offizielle Windows-Version auf Basis von Qt WebEngine 6.10+/Chromium. Sie enthält eine anpassbare Browserleiste, einstellbare Website-Themes, uBlock Origin Lite, einen MV3-Add-on-Manager, Spotify-Mini-Player, verschlüsselten Passwort-Tresor, Einstellungen und einen Update-Mechanismus. Der Build durchläuft automatische Tests und einen Windows-EXE-Selbsttest. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
+> **Projektstand:** Nexlori 1.1.0 baut auf der ersten offiziellen Windows-Version (1.0.0) auf auf Basis von Qt WebEngine 6.10+/Chromium. Sie enthält eine anpassbare Browserleiste, einstellbare Website-Themes, einen Theme-Shop, eingebaute Add-ons, uBlock Origin Lite, einen MV3-Add-on-Manager, Spotify-Mini-Player, verschlüsselten Passwort-Tresor, Einstellungen und einen Update-Mechanismus. Der Build durchläuft automatische Tests und einen Windows-EXE-Selbsttest. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
 
 ## Die Grundidee
 
@@ -126,6 +126,18 @@ nexlori render examples/hello.html examples/hello.png
 pytest                                               # Fenster-Tests laufen nur mit Display (Windows oder xvfb-run)
 pip install pyinstaller && python packaging/build_exe.py   # baut dist/Nexlori(.exe)
 ```
+
+### Theme-Shop und eingebaute Add-ons (ab 1.1.0)
+
+- **Theme-Shop:** zusätzliche Themes nach Bedarf installieren und wieder entfernen. Der Katalog liegt in `themes/catalog.json` und wird mit `python packaging/make_theme_catalog.py` erzeugt und geprüft (WCAG-Kontrast, gültige Namen, keine Überschneidung mit eingebauten Themes). Ein neues Theme besteht nur aus Farben und wird per Pull Request ergänzt.
+- **Eingebaute Add-ons:** Dunkle Webseiten, Nachtlicht, Cookie-Banner ausblenden, Video-Geschwindigkeit, Nach-oben-Knopf, Saubere Links, HTTPS bevorzugen, Tabs schlafen legen, Lesemodus, PDF-Export und Screenshot. Sie laufen lokal und senden nichts.
+- **Titelleiste in Theme-Farben** und einstellbare **Animationen** (Voll, Reduziert, Aus).
+- **Community:** [Nexlori auf Discord](https://discord.com/invite/KM5m7s9GyK).
+
+### GUI-Tests (optional, lokal)
+
+Die Tests des kompletten Browserfensters starten Chromium und laufen deshalb nur auf Wunsch:
+`NEXLORI_GUI_TESTS=1 python -m pytest tests/test_qt_window.py` (unter Linux zusätzlich `QT_QPA_PLATFORM=offscreen`).
 
 ## Roadmap
 

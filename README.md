@@ -1,6 +1,6 @@
-# NEXLORI 1.0.0
+# NEXLORI 1.1.0
 
-Nexlori ist ein anpassbarer Windows-Browser auf Basis von Qt WebEngine/Chromium. Die erste offizielle Version enthält Themes, einen Add-on-Manager mit uBlock Origin Lite, einen Spotify-Mini-Player, einen verschlüsselten Passwort-Tresor und automatische Updates.
+Nexlori ist ein anpassbarer Windows-Browser auf Basis von Qt WebEngine/Chromium. Version 1.1.0 enthält Themes samt Theme-Shop, eingebaute Add-ons, einen Add-on-Manager mit uBlock Origin Lite, einen Spotify-Mini-Player, einen verschlüsselten Passwort-Tresor und automatische Updates.
 
 ## Windows-Download
 
@@ -24,7 +24,9 @@ Der Installer erzeugt das Desktop-Symbol sofort bei der Installation. Bei selbst
 
 **Hinweis:** Qt WebEngine unterstützt nur Manifest V3, daher wird uBlock Origin Lite verwendet. Nicht jede Website oder jedes Add-on funktioniert im eingebetteten Browser. Der Passwortmanager füllt Zugangsdaten noch nicht automatisch in Websites ein und wurde nicht unabhängig sicherheitszertifiziert.
 
-## Feedback
+## Community und Feedback
+
+- 💬 [Nexlori auf Discord](https://discord.com/invite/KM5m7s9GyK)
 
 Fehler, Anliegen und Verbesserungen bitte über [GitHub Issues](https://github.com/paulhubacek1-afk/NEXLORI/issues/new) oder per E-Mail an [nexlori-browser@gmx.at](mailto:nexlori-browser@gmx.at) melden.
 

@@ -256,6 +256,40 @@ _THEMES = [
 ]
 BUILTIN_THEMES: dict[str, Theme] = {t.name: t for t in _THEMES}
 
+# Themes aus dem Theme-Shop werden erst bei der Installation geladen und liegen nur dann auf dem Gerät.
+_INSTALLED_THEMES: dict[str, Theme] = {}
+
+
+def all_themes() -> dict[str, Theme]:
+    """Eingebaute Themes plus die aus dem Shop installierten (eingebaute haben Vorrang)."""
+    merged = dict(BUILTIN_THEMES)
+    for name, theme in _INSTALLED_THEMES.items():
+        merged.setdefault(name, theme)
+    return merged
+
+
+def get_theme(name: str) -> Theme | None:
+    return BUILTIN_THEMES.get(name) or _INSTALLED_THEMES.get(name)
+
+
+def is_known_theme(name: object) -> bool:
+    return isinstance(name, str) and (name in BUILTIN_THEMES or name in _INSTALLED_THEMES)
+
+
+def register_installed_theme(theme: Theme) -> None:
+    """Macht ein Shop-Theme verfügbar. Eingebaute Themes dürfen nie überschrieben werden."""
+    if theme.name in BUILTIN_THEMES:
+        raise ValueError(f"Theme-Name ist bereits eingebaut: {theme.name}")
+    _INSTALLED_THEMES[theme.name] = theme
+
+
+def unregister_installed_theme(name: str) -> None:
+    _INSTALLED_THEMES.pop(name, None)
+
+
+def installed_theme_names() -> list[str]:
+    return sorted(_INSTALLED_THEMES)
+
 
 def combine_themes(names: list[str] | tuple[str, ...]) -> Theme:
     """Combine up to four themes while keeping the first theme's readable base palette.
@@ -268,11 +302,11 @@ def combine_themes(names: list[str] | tuple[str, ...]) -> Theme:
         selected_names = ["dunkel"]
     if len(selected_names) > 4:
         raise ValueError("Es können höchstens vier Themes kombiniert werden.")
-    unknown = [name for name in selected_names if name not in BUILTIN_THEMES]
+    unknown = [name for name in selected_names if not is_known_theme(name)]
     if unknown:
         raise ValueError("Unbekannte Themes: " + ", ".join(unknown))
 
-    selected = [BUILTIN_THEMES[name] for name in selected_names]
+    selected = [get_theme(name) for name in selected_names]
     if len(selected) == 1:
         return selected[0]
 

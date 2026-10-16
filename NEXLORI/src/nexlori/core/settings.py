@@ -10,7 +10,8 @@ from pathlib import Path
 from .datasaver import SaverLevel
 from .media import CORNERS, SIZES
 from .modes import Mode
-from .themes import BUILTIN_THEMES
+from .builtin_addons import ADDON_IDS, default_states
+from .themes import BUILTIN_THEMES, is_known_theme
 
 
 @dataclass
@@ -44,15 +45,19 @@ class Settings:
     allow_web_popups: bool = False
     block_nsfw: bool = True  # lokaler URL-Filter, standardmäßig aktiv
     extensions_enabled: dict[str, bool] = field(default_factory=lambda: {"ublock-origin-lite": True})
+    animations: str = "full"  # "full" | "reduced" | "off"
+    custom_titlebar: bool = True  # eigene Titelleiste in Theme-Farben (False = Windows-Standardleiste)
+    builtin_addons: dict[str, bool] = field(default_factory=default_states)
+    tab_sleep_minutes: int = 15
 
     def problems(self) -> list[str]:
         out = []
-        if self.theme not in BUILTIN_THEMES:
+        if not is_known_theme(self.theme):
             out.append(f"theme: unbekannt ({self.theme!r})")
         if not isinstance(self.theme_mix, list) or len(self.theme_mix) > 3:
             out.append("theme_mix: höchstens drei zusätzliche Themes erwartet")
         elif (
-            any(not isinstance(name, str) or name not in BUILTIN_THEMES or name == self.theme for name in self.theme_mix)
+            any(not is_known_theme(name) or name == self.theme for name in self.theme_mix)
             or len([name for name in self.theme_mix if isinstance(name, str)])
             != len(set(name for name in self.theme_mix if isinstance(name, str)))
         ):
@@ -97,12 +102,34 @@ class Settings:
             or any(not isinstance(key, str) or not isinstance(value, bool) for key, value in self.extensions_enabled.items())
         ):
             out.append("extensions_enabled: erwartet wird ein Wörterbuch aus Add-on-Namen und booleschem Status")
+        if self.animations not in ("full", "reduced", "off"):
+            out.append(f"animations: 'full', 'reduced' oder 'off' erwartet ({self.animations!r})")
+        if not isinstance(self.custom_titlebar, bool):
+            out.append("custom_titlebar: true oder false erwartet")
+        if (
+            not isinstance(self.builtin_addons, dict)
+            or any(not isinstance(key, str) or not isinstance(value, bool) for key, value in self.builtin_addons.items())
+            or any(key not in ADDON_IDS for key in self.builtin_addons)
+        ):
+            out.append("builtin_addons: erwartet wird ein Wörterbuch aus bekannten Add-on-IDs und booleschem Status")
+        if (
+            not isinstance(self.tab_sleep_minutes, int)
+            or isinstance(self.tab_sleep_minutes, bool)
+            or not 2 <= self.tab_sleep_minutes <= 240
+        ):
+            out.append("tab_sleep_minutes: zwischen 2 und 240 erwartet")
         return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "Settings":
         known = {f.name for f in fields(cls)}
-        settings = cls(**{k: v for k, v in data.items() if k in known})  # unbekannte Schlüssel ignorieren
+        values = {k: v for k, v in data.items() if k in known}  # unbekannte Schlüssel ignorieren
+        if isinstance(values.get("builtin_addons"), dict):
+            # Neue Add-ons erhalten ihre Standardwerte, unbekannte (z. B. aus einer neueren Version) fallen weg.
+            merged = default_states()
+            merged.update({k: v for k, v in values["builtin_addons"].items() if k in ADDON_IDS})
+            values["builtin_addons"] = merged
+        settings = cls(**values)
         problems = settings.problems()
         if problems:
             raise ValueError("; ".join(problems))
@@ -114,6 +141,22 @@ class Settings:
         if not path.exists():
             return cls()
         return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+    @classmethod
+    def load_lenient(cls, path: str | Path) -> "Settings":
+        """Wie ``load``, aber ein nicht mehr vorhandenes Theme (z. B. aus dem Shop entfernt) setzt nicht alles zurück."""
+        path = Path(path)
+        if not path.exists():
+            return cls()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Einstellungsdatei ist kein JSON-Objekt")
+        if not is_known_theme(data.get("theme", "dunkel")):
+            data["theme"] = "dunkel"
+        mix = data.get("theme_mix")
+        if isinstance(mix, list):
+            data["theme_mix"] = [n for n in mix if is_known_theme(n) and n != data.get("theme", "dunkel")][:3]
+        return cls.from_dict(data)
 
     def save(self, path: str | Path) -> None:
         path = Path(path)

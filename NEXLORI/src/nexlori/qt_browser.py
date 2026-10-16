@@ -9,14 +9,21 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QEventLoop, QEasingCurve, QPoint, QPropertyAnimation, QThread, QTimer, QUrl, QUrlQuery, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QIcon, QKeySequence, QPixmap, QShortcut
+from PySide6.QtCore import (
+    QEventLoop, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QStringListModel, QThread, QTimer, QUrl,
+    QUrlQuery, Qt, Signal,
+)
+from PySide6.QtGui import (
+    QAction, QActionGroup, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QCompleter,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -34,6 +41,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStatusBar,
     QTabWidget,
     QToolButton,
     QVBoxLayout,
@@ -52,9 +60,18 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, default_settings_path
-from .core.themes import BUILTIN_THEMES, Theme, combine_themes, relative_luminance
-from .default_browser import default_browser_settings_uri, register_windows_browser
-from .web_safety import addons_page_html, error_page_html, home_network_page_html, is_nsfw_url, normalize_home_target
+from .animations import AccentLine, Motion, animate_progress, cascade_in, crossfade
+from .core.builtin_addons import ADDONS, build_addons_script, is_enabled, reader_script
+from .core.privacy import strip_tracking_params, tabs_to_sleep, upgrade_to_https
+from .core.theme_shop import ShopError, ThemeStore, default_theme_dir
+from .core.themes import (
+    BUILTIN_THEMES, Theme, all_themes, combine_themes, get_theme, installed_theme_names, is_known_theme,
+    relative_luminance,
+)
+from .links import DISCORD_URL, FEEDBACK_EMAIL, REPOSITORY_URL
+from .tabstrip import TabStrip
+from .titlebar import DialogThemer, ResizeFrame, TitleBar, apply_native_titlebar_colors
+from .web_safety import addons_page_html, home_network_page_html, normalize_home_target
 from .extension_utils import (
     bundled_ubolite_path,
     unpack_extension_package,
@@ -67,8 +84,6 @@ from .page_theme import build_page_theme_script
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
-FEEDBACK_EMAIL = "nexlori-browser@gmx.at"
-REPOSITORY_URL = "https://github.com/paulhubacek1-afk/NEXLORI"
 
 
 def _qt_app_icon(theme: Theme | None = None) -> QIcon:
@@ -83,8 +98,20 @@ def _qt_app_icon(theme: Theme | None = None) -> QIcon:
     return QIcon(pixmap)
 
 
+def _mix_hex(first: str, second: str, ratio: float) -> str:
+    """Mischt zwei #RRGGBB-Farben (ratio=0 -> first, ratio=1 -> second)."""
+    a, b = QColor(first), QColor(second)
+    return "#{:02X}{:02X}{:02X}".format(
+        round(a.red() + (b.red() - a.red()) * ratio),
+        round(a.green() + (b.green() - a.green()) * ratio),
+        round(a.blue() + (b.blue() - a.blue()) * ratio),
+    )
+
+
 def _theme_gradient(theme: Theme) -> str:
     colors = theme.stripes or (theme.accent,)
+    if len(colors) < 2:
+        colors = (colors[0], colors[0])  # Qt braucht mindestens zwei Stopps für einen Verlauf
     stops = []
     for index, color in enumerate(colors):
         position = index / max(1, len(colors) - 1)
@@ -134,6 +161,9 @@ button:hover {{ transform:translateY(-1px); filter:brightness(1.08); }} button:a
 a.tile {{ text-decoration:none; color:{theme.fg}; display:block; border:1px solid {theme.surface}; border-radius:17px; padding:19px; background:{theme.surface}; transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease; animation:tile-enter .55s ease both; }}
 a.tile:nth-child(2) {{ animation-delay:.05s; }} a.tile:nth-child(3) {{ animation-delay:.10s; }} a.tile:nth-child(4) {{ animation-delay:.15s; }} a.tile:nth-child(5) {{ animation-delay:.20s; }} a.tile:nth-child(6) {{ animation-delay:.25s; }}
 a.tile:hover {{ border-color:{theme.accent}; transform:translateY(-4px); box-shadow:0 12px 30px {theme.accent}18; }}
+.community {{ margin:20px 0 22px; display:flex; justify-content:center; }}
+a.cta {{ display:inline-flex; align-items:center; gap:10px; text-decoration:none; font-weight:600; color:{theme.bg}; background:{theme.accent}; padding:12px 24px; border-radius:999px; transition:transform .2s ease,box-shadow .2s ease; }}
+a.cta:hover {{ transform:translateY(-2px); box-shadow:0 10px 26px {theme.accent}55; }}
 .tile-icon {{ display:block; color:{theme.accent}; font-size:22px; margin-bottom:9px; }}
 small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
 .foot {{ font-size:12px; margin-top:28px; opacity:.56; }}
@@ -145,6 +175,7 @@ small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
 </style></head><body>{pride_visuals}<main><div class="stripe"></div><span class="mark">NEXLORI / BROWSER</span>
 <h1>Das Web. Auf deine Art.</h1><p class="intro">Ein Browser, der sich deinem Stil anpasst – mit persönlicher Farbwelt, ruhiger Oberfläche und lokalem Schutz.</p>{pride_pill}
 <form class="bar" id="search"><input id="query" autocomplete="off" autofocus placeholder="Suchen oder Webadresse eingeben" aria-label="Suchen oder Webadresse eingeben"><button type="submit">Los ↗</button></form>
+<div class="community"><a class="cta" href="nexlori://community/discord" title="Nexlori-Community auf Discord">💬 Discord-Community beitreten</a></div>
 <div class="tiles">
 <a class="tile" href="https://www.wikipedia.org/"><span class="tile-icon">⌕</span><strong>Wissen</strong><small>Wikipedia</small></a>
 <a class="tile" href="https://www.youtube.com/"><span class="tile-icon">▶</span><strong>Video</strong><small>YouTube</small></a>
@@ -157,15 +188,102 @@ small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
 const template = {search_template};
 document.getElementById('search').addEventListener('submit', function(e) {{
  e.preventDefault(); const q=document.getElementById('query').value.trim(); if(!q) return;
- const looksLikeUrl=/^(https?:\/\/|file:\/\/)/i.test(q) || (/^[^\s]+\.[^\s]+$/.test(q) && !q.includes(' '));
- location.href=looksLikeUrl?(q.match(/^[a-z]+:\/\//i)?q:'https://'+q):template.replace("{{}}",encodeURIComponent(q));
+ const looksLikeUrl=/^(https?:\\/\\/|file:\\/\\/)/i.test(q) || (/^[^\\s]+\\.[^\\s]+$/.test(q) && !q.includes(' '));
+ location.href=looksLikeUrl?(q.match(/^[a-z]+:\\/\\//i)?q:'https://'+q):template.replace("{{}}",encodeURIComponent(q));
 }});
 </script></main></body></html>"""
 
+def _line_icon(kind: str, color: str) -> QIcon:
+    """Kleine, selbst gezeichnete Symbole in Theme-Farbe (Schloss, Warnung, Nexlori-Punkt, Löschen)."""
+    size = 32
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    paint = QColor(color)
+    if kind in ("secure", "insecure"):
+        painter.setPen(QPen(paint, 3))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawArc(QRect(9 if kind == "secure" else 14, 3, 14, 18), 0, 180 * 16)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(paint)
+        painter.drawRoundedRect(QRect(6, 13, 20, 15), 3, 3)
+    elif kind == "internal":
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(paint)
+        painter.drawEllipse(QRect(9, 9, 14, 14))
+    elif kind == "clear":
+        painter.setPen(QPen(paint, 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(10, 10, 22, 22)
+        painter.drawLine(22, 10, 10, 22)
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _security_kind(url_text: str) -> str | None:
+    lowered = url_text.lower()
+    if lowered.startswith("https://"):
+        return "secure"
+    if lowered.startswith("http://"):
+        return "insecure"
+    if lowered.startswith(("about:", "file:", "nexlori:")):
+        return "internal"
+    return None
+
+
 class AddressBar(QLineEdit):
+    """Such-/Adressleiste mit Sicherheitssymbol, Löschknopf in Theme-Farbe und Chrome-ähnlichem Markieren."""
+
+    escapePressed = Signal()
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._icon_color = "#888888"
+        self._security_kind: str | None = None
+        self._security_action = self.addAction(QIcon(), QLineEdit.ActionPosition.LeadingPosition)
+        self._security_action.setVisible(False)
+        self._clear_action = self.addAction(QIcon(), QLineEdit.ActionPosition.TrailingPosition)
+        self._clear_action.setToolTip("Eingabe löschen")
+        self._clear_action.setVisible(False)
+        self._clear_action.triggered.connect(lambda _checked=False: (self.clear(), self.setFocus()))
+        self.textChanged.connect(lambda text: self._clear_action.setVisible(bool(text)))
+
+    def set_icon_color(self, color: str) -> None:
+        self._icon_color = color
+        self._clear_action.setIcon(_line_icon("clear", color))
+        self.set_security(self._security_kind)
+
+    def set_security(self, kind: str | None) -> None:
+        self._security_kind = kind
+        if kind is None:
+            self._security_action.setVisible(False)
+            return
+        color = "#E8A33D" if kind == "insecure" else self._icon_color
+        self._security_action.setIcon(_line_icon(kind, color))
+        self._security_action.setToolTip({
+            "secure": "Verbindung ist verschlüsselt (HTTPS)",
+            "insecure": "Nicht verschlüsselt (HTTP) – gib hier keine Passwörter ein",
+            "internal": "Interne Seite oder lokale Datei",
+        }[kind])
+        self._security_action.setVisible(True)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        was_focused = self.hasFocus()
+        super().mousePressEvent(event)
+        if not was_focused and event.button() == Qt.MouseButton.LeftButton:
+            self.selectAll()  # erster Klick markiert alles, danach wird normal der Cursor gesetzt
+
     def focusInEvent(self, event) -> None:  # noqa: N802
         super().focusInEvent(event)
-        QTimer.singleShot(0, self.selectAll)
+        if event.reason() != Qt.FocusReason.MouseFocusReason:
+            QTimer.singleShot(0, self.selectAll)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape:
+            self.escapePressed.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class UpdateWorker(QThread):
@@ -198,6 +316,7 @@ class BrowserPage(QWebEnginePage):
     def __init__(self, profile: QWebEngineProfile, owner: "NexloriWindow", parent: QWidget):
         super().__init__(profile, parent)
         self.owner = owner
+        self._https_origin: str | None = None  # ursprüngliche http-Adresse, solange der https-Versuch läuft
 
     def createWindow(self, _window_type):  # noqa: N802
         # Website popups can be blocked or opened in a Nexlori tab from Settings.
@@ -211,6 +330,17 @@ class BrowserPage(QWebEnginePage):
         if url.scheme().lower() in {"mailto", "tel"}:
             QDesktopServices.openUrl(url)
             return False
+        if url.scheme().lower() == "nexlori":
+            # Interne Links der Startseite und der Nexlori-Seiten (Einstellungen, Add-ons, Heimnetz, Discord …)
+            if is_main_frame:
+                internal = QUrl(url)
+                QTimer.singleShot(0, lambda: self.owner.handle_internal_url(self, internal))
+            return False
+        if is_main_frame and url.scheme().lower() in {"http", "https"}:
+            target = self.owner.rewrite_navigation(self, url, navigation_type)
+            if target is not None:
+                QTimer.singleShot(0, lambda: self.setUrl(QUrl(target)))
+                return False
         return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
 
 
@@ -226,6 +356,22 @@ class NexloriWindow(QMainWindow):
         super().__init__()
         self.settings = settings
         self.settings_path = settings_path
+        self.custom_titlebar = bool(settings.custom_titlebar)
+        if self.custom_titlebar:
+            # Rahmenloses Fenster: Titelleiste, Größenänderung und Verschieben übernimmt Nexlori (siehe titlebar.py).
+            self.setWindowFlags(
+                Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.WindowMinMaxButtonsHint | Qt.WindowType.WindowSystemMenuHint
+            )
+        self.motion = Motion(settings.animations)
+        self.theme_store = ThemeStore(default_theme_dir(settings_path))
+        self.theme_store.load_into_registry()
+        self._html_fullscreen = False
+        self._http_allowed_hosts: set[str] = set()
+        self._fullscreen_restore = "normal"
+        self._first_show = True
+        self._tab_activity: dict[QWebEngineView, float] = {}
+        self._addons_script: QWebEngineScript | None = None
         self.storage_dir = settings_path.parent / "web-profile"
         self.cache_dir = self.storage_dir / "cache"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -249,6 +395,7 @@ class NexloriWindow(QMainWindow):
         self.profile.downloadRequested.connect(self._download_requested)
         self._page_theme_script = None
         self._refresh_page_theme_script()
+        self._refresh_addons_script()
         try:
             self.extension_manager = self.profile.extensionManager()
             self.extension_manager.installFinished.connect(self._on_extension_installed)
@@ -257,12 +404,13 @@ class NexloriWindow(QMainWindow):
             self.extension_manager = None
 
         self.setWindowTitle("Nexlori")
-        self.setWindowIcon(_qt_app_icon())
+        self.setWindowIcon(_qt_app_icon(self.theme))
         self.resize(1240, 820)
         self.setMinimumSize(760, 480)
         self._build_ui()
         self._apply_browser_theme()
         self._bind_shortcuts()
+        self._start_tab_sleep_timer()
         view = self.new_tab(start_page=start_url is None, activate=True)
         if start_url:
             self.navigate_view(view, start_url)
@@ -276,8 +424,14 @@ class NexloriWindow(QMainWindow):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        self.accent_line = QWidget(root)
-        self.accent_line.setFixedHeight(4)
+        self.title_bar: TitleBar | None = None
+        if self.custom_titlebar:
+            self.title_bar = TitleBar(self)
+            self.title_bar.set_icon(self.windowIcon())
+            self.windowTitleChanged.connect(self.title_bar.set_title)
+            outer.addWidget(self.title_bar)
+
+        self.accent_line = AccentLine(root, 4)
         outer.addWidget(self.accent_line)
 
         tab_row = QHBoxLayout()
@@ -291,20 +445,20 @@ class NexloriWindow(QMainWindow):
         self.new_tab_button.clicked.connect(lambda: self.new_tab())
         tab_row.addWidget(self.new_tab_button)
 
-        self.tabs = QTabWidget(root)
-        self.tabs.setDocumentMode(True)
-        self.tabs.setMovable(True)
-        self.tabs.setTabsClosable(True)
-        self.tabs.setElideMode(Qt.TextElideMode.ElideRight)
+        # Tab-Leiste und Seitenstapel sind getrennt: Die Leiste sitzt hier oben, die Webseiten ganz unten
+        # unter der Suchleiste (früher lag die Suchleiste dadurch unter der Webseite).
+        self.tabs = TabStrip(self)
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self._on_current_changed)
-        tab_row.addWidget(self.tabs, 1)
-        tab_widget = QWidget(root)
-        tab_widget.setLayout(tab_row)
-        outer.addWidget(tab_widget)
+        tab_row.addWidget(self.tabs.bar, 1)
+        self.tab_row_widget = QWidget(root)
+        self.tab_row_widget.setLayout(tab_row)
+        outer.addWidget(self.tab_row_widget)
 
+        self.tab_row_widget.setObjectName("tabRow")
         toolbar = QWidget(root)
         toolbar.setObjectName("toolbar")
+        self.toolbar_widget = toolbar
         nav = QHBoxLayout(toolbar)
         nav.setContentsMargins(12, 9, 12, 10)
         nav.setSpacing(6)
@@ -321,13 +475,16 @@ class NexloriWindow(QMainWindow):
         self.address = AddressBar(toolbar)
         self.address.setObjectName("addressBar")
         self.address.setPlaceholderText("Suchen oder Webadresse eingeben")
-        self.address.setClearButtonEnabled(True)
         self.address.setMinimumHeight(42)
-        self.address.setMinimumWidth(220)
+        self.address.setMinimumWidth(260)
         self.address.setMaximumWidth(self.settings.toolbar_search_width)
         self.address.returnPressed.connect(self.navigate_address)
-        nav.addWidget(self.address, 0)
+        self.address.escapePressed.connect(self._restore_address)
+        # Hoher Streckfaktor: Die Leiste füllt den freien Platz bis zur gewählten Maximalbreite
+        # (vorher blieb sie bei ca. 220 px stehen, egal wie breit das Fenster oder die Einstellung war).
+        nav.addWidget(self.address, 100)
         nav.addStretch(1)
+        self._build_address_completer()
 
         self.bookmark_button = self._tool("☆", "Lesezeichen hinzufügen/entfernen", self.toggle_bookmark)
         nav.addWidget(self.bookmark_button)
@@ -380,12 +537,28 @@ class NexloriWindow(QMainWindow):
         self.progress.setFixedHeight(3)
         self.progress.hide()
         outer.addWidget(self.progress)
+        outer.addWidget(self.tabs.stack, 1)
 
-        self.setCentralWidget(root)
+        # Eigene Statusleiste innerhalb des Rahmens, damit der Größenänderungs-Rand rundum gleich bleibt.
+        self._status_bar = QStatusBar(root)
+        self._status_bar.setSizeGripEnabled(False)
+        outer.addWidget(self._status_bar)
+
+        self.resize_frame: ResizeFrame | None = None
+        if self.custom_titlebar:
+            self.resize_frame = ResizeFrame(self, root)
+            self.setCentralWidget(self.resize_frame)
+        else:
+            self.setCentralWidget(root)
         self.statusBar().showMessage("Nexlori · Chromium-WebEngine")
         self._apply_toolbar_preferences()
         self._build_theme_menu()
         self._build_more_menu()
+
+    def statusBar(self) -> QStatusBar:  # noqa: N802
+        """Die Statusleiste liegt im eigenen Layout (siehe _build_ui) statt am Fensterrand."""
+        bar = getattr(self, "_status_bar", None)
+        return bar if bar is not None else super().statusBar()
 
     def _tool(self, label: str, tip: str, callback) -> QToolButton:
         button = QToolButton(self)
@@ -396,8 +569,14 @@ class NexloriWindow(QMainWindow):
         button.clicked.connect(callback)
         return button
 
+    def rebuild_theme_menu(self) -> None:
+        """Nach Installation/Entfernen eines Shop-Themes das Menü neu aufbauen."""
+        self.theme_menu.clear()
+        self._build_theme_menu()
+
     def _build_theme_menu(self) -> None:
-        self.theme_menu = QMenu(self)
+        if not hasattr(self, "theme_menu"):
+            self.theme_menu = QMenu(self)
         self.theme_menu.setTitle("Theme")
         self.theme_actions: dict[str, QAction] = {}
         self.theme_action_group = QActionGroup(self)
@@ -420,6 +599,7 @@ class NexloriWindow(QMainWindow):
             ("Basis", [n for n in ("hell", "dunkel", "ruhig", "hochkontrast") if n in BUILTIN_THEMES]),
             ("Alle Pride-Flaggen", [n for n in BUILTIN_THEMES if n.startswith("pride-")]),
             ("Weitere Looks", [n for n in BUILTIN_THEMES if n not in {"hell", "dunkel", "ruhig", "hochkontrast"} and not n.startswith("pride-")]),
+            ("Aus dem Theme-Shop", installed_theme_names()),
         )
         for label, names in groups:
             if not names:
@@ -428,11 +608,14 @@ class NexloriWindow(QMainWindow):
             for name in names:
                 self._add_theme_action(submenu, name)
         self.theme_menu.addSeparator()
+        self.theme_menu.addAction("Theme-Shop …", self.show_theme_shop)
         self.theme_menu.addAction("Themes kombinieren …", self.edit_theme_mix)
         self.theme_menu.addAction("Drei Pride-Favoriten auswählen …", self.edit_pride_favorites)
 
     def _add_theme_action(self, menu: QMenu, name: str) -> None:
-        theme = BUILTIN_THEMES[name]
+        theme = get_theme(name)
+        if theme is None:
+            return
         # The same theme can appear in both favourites and the full collection.
         action = QAction(theme.label, self, checkable=True)
         action.setChecked(name == self.settings.theme)
@@ -481,7 +664,7 @@ class NexloriWindow(QMainWindow):
                 )
             update_count()
 
-        for name, theme in BUILTIN_THEMES.items():
+        for name, theme in all_themes().items():
             checkbox = QCheckBox(theme.label, content)
             checkbox.setChecked(name in selected_names)
             if name == base_name:
@@ -671,6 +854,9 @@ class NexloriWindow(QMainWindow):
     def open_feedback_email(self) -> None:
         QDesktopServices.openUrl(QUrl(f"mailto:{FEEDBACK_EMAIL}?subject=Nexlori%20-%20Anliegen%20oder%20Verbesserung"))
 
+    def open_discord(self) -> None:
+        QDesktopServices.openUrl(QUrl(DISCORD_URL))
+
     def open_feedback_github(self) -> None:
         QDesktopServices.openUrl(QUrl(f"{REPOSITORY_URL}/issues/new?title=Nexlori%20Feedback"))
 
@@ -682,7 +868,9 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addSeparator()
         self.more_menu.addAction("Spotify Mini-Player", self.show_spotify_popup, QKeySequence("Ctrl+Shift+M"))
         self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
-        self.more_menu.addAction("Add-ons verwalten", self.show_extensions_manager)
+        self.more_menu.addAction("Nexlori-Add-ons …", self.show_addons_center)
+        self.tools_menu = self.more_menu.addMenu("Werkzeuge")
+        self.more_menu.addAction("Theme-Shop …", self.show_theme_shop)
         self.more_menu.addAction("Einstellungen", self.show_settings, QKeySequence("Ctrl+,"))
         self.more_menu.addAction("Browserleiste anpassen …", self.customize_toolbar)
         self.more_menu.addSeparator()
@@ -691,17 +879,25 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Theme auswählen", self.show_theme_menu)
         self.more_menu.addAction("Nach Updates suchen", self.check_for_updates)
         self.more_menu.addSeparator()
+        self.more_menu.addAction("💬 Discord-Community beitreten …", self.open_discord)
         self.more_menu.addAction("Feedback per E-Mail …", self.open_feedback_email)
         self.more_menu.addAction("Verbesserung auf GitHub melden …", self.open_feedback_github)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Über Nexlori", self.show_about)
         self.more_menu.addAction("Beenden", self.close, QKeySequence("Alt+F4"))
+        self._refresh_tools_menu()
 
     def _bind_shortcuts(self) -> None:
         shortcuts = (
             ("Ctrl+T", lambda: self.new_tab()),
             ("Ctrl+W", lambda: self.close_tab(self.tabs.currentIndex())),
             ("Ctrl+L", self.focus_address),
+            ("Alt+D", self.focus_address),
+            ("F6", self.focus_address),
+            ("Ctrl+P", lambda: self._run_tool("pdf-export")),
+            ("Ctrl+Alt+R", lambda: self._run_tool("reader")),
+            ("Ctrl+Alt+S", lambda: self._run_tool("screenshot")),
+            ("Ctrl+=", lambda: self.change_zoom(0.1)),
             ("Ctrl+R", self.reload_current),
             ("F5", self.reload_current),
             ("Alt+Left", self.go_back),
@@ -726,10 +922,23 @@ class NexloriWindow(QMainWindow):
     def _apply_browser_theme(self) -> None:
         theme = self.theme
         icon_px = self.settings.toolbar_icon_size
-        self.setStyleSheet(f"""
+        muted = _mix_hex(theme.fg, theme.surface, 0.45)
+        close_icons = self._write_tab_close_icons(theme)
+        close_css = (
+            f'QTabBar::close-button {{ image:url("{close_icons[0]}"); subcontrol-position:right; border-radius:7px; padding:3px; }}\n'
+            f'QTabBar::close-button:hover {{ image:url("{close_icons[1]}"); background:{theme.surface}; }}\n'
+            if close_icons else ""
+        )
+        self.setStyleSheet(close_css + f"""
 QMainWindow, QWidget {{ background:{theme.bg}; color:{theme.fg}; }}
 QWidget#toolbar {{ background:{theme.bg}; }}
-QTabWidget::pane {{ border:0; background:{theme.bg}; }}
+QWidget#tabRow {{ background:{theme.surface}; }}
+QWidget#titleBar {{ background:{theme.surface}; }}
+QLabel#titleText {{ color:{theme.fg}; background:transparent; font-size:12px; }}
+QToolButton#titleButton, QToolButton#titleCloseButton {{ background:transparent; color:{theme.fg}; border:0; border-radius:0;
+ min-width:46px; max-width:46px; min-height:38px; max-height:38px; padding:0; font-size:13px; }}
+QToolButton#titleButton:hover {{ background:{theme.bg}; color:{theme.accent}; }}
+QToolButton#titleCloseButton:hover {{ background:#E81123; color:#FFFFFF; }}
 QTabBar {{ background:{theme.surface}; }}
 QTabBar::tab {{ background:{theme.surface}; color:{theme.fg}; border:1px solid transparent;
  border-top-left-radius:10px; border-top-right-radius:10px; padding:10px 13px; margin-right:3px; min-width:90px; }}
@@ -745,24 +954,82 @@ QLineEdit#addressBar {{ font-size:14px; }}
 QMenu {{ background:{theme.surface}; color:{theme.fg}; border:1px solid {theme.accent}; padding:5px; }}
 QMenu::item {{ padding:7px 26px 7px 12px; border-radius:7px; }}
 QMenu::item:selected {{ background:{theme.bg}; color:{theme.accent}; }}
+QMenu::item:disabled {{ color:{muted}; }}
 QProgressBar#loadProgress {{ border:0; background:{theme.surface}; }}
 QProgressBar#loadProgress::chunk {{ background:{theme.accent}; }}
 QStatusBar {{ background:{theme.surface}; color:{theme.fg}; }}
 QStatusBar::item {{ border:0; }}
 QLabel {{ background:transparent; }}
+QPushButton {{ background:{theme.surface}; color:{theme.fg}; border:1px solid {theme.surface}; border-radius:10px; padding:7px 16px; }}
+QPushButton:hover {{ border-color:{theme.accent}; }}
+QPushButton:pressed {{ background:{theme.bg}; }}
+QPushButton:disabled {{ color:{muted}; }}
 """)
-        self.accent_line.setStyleSheet(f"background:{_theme_gradient(theme)};")
-        self.tabs.setStyleSheet(f"QTabWidget::pane {{ border:0; background:{theme.bg}; }}")
+        palette = QPalette()
+        for role, color in (
+            (QPalette.ColorRole.Window, theme.bg), (QPalette.ColorRole.WindowText, theme.fg),
+            (QPalette.ColorRole.Base, theme.surface), (QPalette.ColorRole.AlternateBase, theme.bg),
+            (QPalette.ColorRole.Text, theme.fg), (QPalette.ColorRole.Button, theme.surface),
+            (QPalette.ColorRole.ButtonText, theme.fg), (QPalette.ColorRole.Highlight, theme.accent),
+            (QPalette.ColorRole.HighlightedText, theme.bg), (QPalette.ColorRole.ToolTipBase, theme.surface),
+            (QPalette.ColorRole.ToolTipText, theme.fg), (QPalette.ColorRole.PlaceholderText, muted),
+            (QPalette.ColorRole.Link, theme.accent),
+        ):
+            palette.setColor(role, QColor(color))
+        self.setPalette(palette)
+        app = QApplication.instance()
+        if app is not None:
+            app.setPalette(palette)  # Dialoge und Menüs sind eigene Fenster und erben die Fensterpalette nicht
+        self.accent_line.set_theme(theme)
+        self.accent_line.set_flow(self.motion.continuous and self.isVisible())
         self.statusBar().setStyleSheet(f"QStatusBar {{ background:{theme.surface}; color:{theme.fg}; }}")
+        self.address.set_icon_color(theme.fg)
+        self._completer.popup().setStyleSheet(
+            f"QListView {{ background:{theme.surface}; color:{theme.fg}; border:1px solid {theme.accent}; padding:4px; }}"
+            f"QListView::item {{ padding:6px 10px; border-radius:6px; }}"
+            f"QListView::item:selected {{ background:{theme.bg}; color:{theme.accent}; }}"
+        )
+        if self.resize_frame is not None:
+            self.resize_frame.set_colors(theme.surface, theme.accent)
+        try:
+            icon = _qt_app_icon(theme)
+            self.setWindowIcon(icon)
+            if self.title_bar is not None:
+                self.title_bar.set_icon(icon)
+        except Exception:  # noqa: BLE001 - das Icon ist rein kosmetisch
+            pass
+        if not self.custom_titlebar and self.isVisible():
+            apply_native_titlebar_colors(self, theme)
+
+    def _write_tab_close_icons(self, theme: Theme) -> tuple[str, str] | None:
+        """Zeichnet die Schließen-Symbole der Tabs in Theme-Farben und gibt (normal, hover) als Pfade zurück."""
+        try:
+            folder = self.settings_path.parent / "ui"
+            folder.mkdir(parents=True, exist_ok=True)
+            paths = []
+            for name, color in (("tab-close", theme.fg), ("tab-close-hover", theme.accent)):
+                target = folder / f"{name}.png"
+                _line_icon("clear", color).pixmap(32, 32).save(str(target), "PNG")
+                paths.append(target.as_posix())
+            return paths[0], paths[1]
+        except OSError:
+            return None
+
+    def _chrome_region(self) -> QRect:
+        """Bereich über der Webseite (Titel, Tabs, Suchleiste) – nur dieser wird beim Theme-Wechsel überblendet."""
+        top = self.tabs.stack.mapTo(self, QPoint(0, 0)).y()
+        return QRect(0, 0, self.width(), max(0, top))
+
     def set_theme(self, name: str) -> None:
-        if name not in BUILTIN_THEMES:
+        if not is_known_theme(name):
             return
         self.settings.theme = name
         self.settings.theme_mix = []
         self.theme = combine_themes([self.settings.theme])
         # Update the profile-level stylesheet too, so pages opened later receive the new theme.
         self._refresh_page_theme_script()
-        self._apply_browser_theme()
+        self._refresh_addons_script()
+        crossfade(self, self._chrome_region(), self._apply_browser_theme, self.motion)
         for action_name, actions in self._theme_action_copies.items():
             for action in actions:
                 action.setChecked(action_name == name)
@@ -774,6 +1041,8 @@ QLabel {{ background:transparent; }}
                 self.apply_page_theme(view)
                 if getattr(view, "_nexlori_start", False):
                     view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+                elif getattr(view, "_nexlori_internal", None):
+                    self._show_internal_page(view, view._nexlori_internal)
         self.statusBar().showMessage(f"Theme: {self.theme.label}", 2500)
 
     @staticmethod
@@ -825,7 +1094,7 @@ QLabel {{ background:transparent; }}
         start_page: bool = True,
         activate: bool = True,
     ) -> QWebEngineView:
-        view = QWebEngineView(self.tabs)
+        view = QWebEngineView(self.tabs.stack)
         page = BrowserPage(self.profile, self, view)
         view.setPage(page)
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
@@ -844,6 +1113,10 @@ QLabel {{ background:transparent; }}
             lambda status, exit_code, w=view: self._on_render_process_terminated(w, status, exit_code)
         )
         view.page().linkHovered.connect(self._on_link_hovered)
+        view.page().fullScreenRequested.connect(self._on_fullscreen_requested)
+        view.page().pdfPrintingFinished.connect(self._on_pdf_finished)
+        view._nexlori_loading = False
+        self._tab_activity[view] = time.monotonic()
         index = self.tabs.addTab(view, "Neuer Tab")
         if activate:
             self.tabs.setCurrentIndex(index)
@@ -868,18 +1141,33 @@ QLabel {{ background:transparent; }}
         if index < 0 or index >= self.tabs.count():
             return
         widget = self.tabs.widget(index)
+        if self._html_fullscreen:
+            self._set_html_fullscreen(False)
         self.tabs.removeTab(index)
         if widget:
+            self._tab_activity.pop(widget, None)
+            if getattr(self, "_active_view", None) is widget:
+                self._active_view = None
             widget.deleteLater()
         if self.tabs.count() == 0:
             self.new_tab()
         self._update_navigation_state()
 
     def _on_current_changed(self, _index: int) -> None:
+        if self._html_fullscreen:
+            self._set_html_fullscreen(False)
+        now = time.monotonic()
+        previous = getattr(self, "_active_view", None)
+        if previous is not None and previous in self._tab_activity:
+            self._tab_activity[previous] = now  # ab jetzt zählt die Zeit im Hintergrund
         view = self.current_view()
+        self._active_view = view
         if view:
+            self._tab_activity[view] = now
+            self._wake_view(view)
             self._on_url_changed(view, view.url())
             self._update_bookmark_button()
+            self.setWindowTitle(f"{view.title()} — Nexlori" if view.title() else "Nexlori")
         self._update_navigation_state()
 
     def _update_tab_title(self, view: QWebEngineView, title: str) -> None:
@@ -897,15 +1185,27 @@ QLabel {{ background:transparent; }}
         if url_text and url_text != "about:blank":
             # The start page may navigate through its own search form or links.
             view._nexlori_start = False
+            view._nexlori_internal = None
         if view is self.current_view():
+            internal = getattr(view, "_nexlori_internal", None)
             if getattr(view, "_nexlori_start", False) and url_text == "about:blank":
                 self.address.clear()
+                self.address.set_security(None)
+            elif internal and url_text == "about:blank":
+                self.address.setText(internal)
+                self.address.setModified(False)
+                self.address.set_security("internal")
             else:
-                self.address.setText(url_text)
+                # Während der Nutzer gerade tippt, darf eine Weiterleitung den Text nicht überschreiben.
+                if not (self.address.hasFocus() and self.address.isModified()):
+                    self.address.setText(url_text)
+                    self.address.setModified(False)
+                self.address.set_security(_security_kind(url_text))
             self._update_navigation_state()
             self._update_bookmark_button()
 
     def _load_started(self, view: QWebEngineView) -> None:
+        view._nexlori_loading = True
         if view is self.current_view():
             self.progress.setValue(0)
             self.progress.show()
@@ -913,11 +1213,24 @@ QLabel {{ background:transparent; }}
 
     def _load_progress(self, view: QWebEngineView, value: int) -> None:
         if view is self.current_view():
-            self.progress.setValue(value)
+            animate_progress(self.progress, value, self.motion)
             if value >= 100:
-                self.progress.hide()
+                QTimer.singleShot(self.motion.ms(220) + 40, self._hide_progress_if_done)
+
+    def _hide_progress_if_done(self) -> None:
+        if self.progress.value() >= 100:
+            self.progress.hide()
 
     def _load_finished(self, view: QWebEngineView, ok: bool) -> None:
+        view._nexlori_loading = False
+        page = view.page()
+        origin = getattr(page, "_https_origin", None)
+        if origin and view.url().scheme().lower() == "https":
+            page._https_origin = None
+            if not ok:
+                QTimer.singleShot(0, lambda: self._offer_http_fallback(view, origin))
+        if ok:
+            self._remember_visit(view)
         if view is self.current_view():
             self.progress.hide()
             self.statusBar().showMessage(
@@ -976,6 +1289,7 @@ QLabel {{ background:transparent; }}
             view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
             return
         view._nexlori_start = False
+        view._nexlori_internal = None
         view.setUrl(QUrl(url))
 
     def go_back(self) -> None:
@@ -992,7 +1306,9 @@ QLabel {{ background:transparent; }}
         view = self.current_view()
         if view is None:
             return
-        if getattr(view, "_nexlori_start", False) and view.url().toString() == "about:blank":
+        if getattr(view, "_nexlori_internal", None) and view.url().toString() == "about:blank":
+            self._show_internal_page(view, view._nexlori_internal)
+        elif getattr(view, "_nexlori_start", False) and view.url().toString() == "about:blank":
             view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
         else:
             view.reload()
@@ -1001,10 +1317,59 @@ QLabel {{ background:transparent; }}
         view = self.current_view()
         if view:
             view._nexlori_start = True
+            view._nexlori_internal = None
             view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
             index = self.tabs.indexOf(view)
             if index >= 0:
                 self.tabs.setTabText(index, "Nexlori · Startseite")
+
+    def _restore_address(self) -> None:
+        """Esc in der Adressleiste: Eingabe verwerfen und die aktuelle Adresse wieder anzeigen."""
+        view = self.current_view()
+        if view is None:
+            return
+        url_text = view.url().toString()
+        is_start = getattr(view, "_nexlori_start", False) and url_text == "about:blank"
+        internal = getattr(view, "_nexlori_internal", None)
+        self.address.setText("" if is_start else (internal or url_text) if url_text == "about:blank" else url_text)
+        self.address.setModified(False)
+        view.setFocus()
+
+    def _build_address_completer(self) -> None:
+        self._visited: dict[str, str] = {}
+        self._suggestion_model = QStringListModel(self)
+        completer = QCompleter(self._suggestion_model, self.address)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        completer.setMaxVisibleItems(8)
+        completer.activated[str].connect(self._suggestion_chosen)
+        self.address.setCompleter(completer)
+        self._completer = completer
+        self._refresh_suggestions()
+
+    def _refresh_suggestions(self) -> None:
+        """Vorschläge: Lesezeichen und in dieser Sitzung besuchte Seiten (nur im Arbeitsspeicher)."""
+        urls: list[str] = []
+        for item in self.bookmarks:
+            urls.append(str(item.get("url", "")))
+        urls.extend(reversed(list(self._visited)))
+        unique = list(dict.fromkeys(u for u in urls if u))
+        self._suggestion_model.setStringList(unique[:400])
+
+    def _remember_visit(self, view: QWebEngineView) -> None:
+        url = view.url().toString()
+        if not url.lower().startswith(("http://", "https://")):
+            return
+        self._visited.pop(url, None)
+        self._visited[url] = view.title()
+        while len(self._visited) > 300:
+            self._visited.pop(next(iter(self._visited)))
+        self._refresh_suggestions()
+
+    def _suggestion_chosen(self, text: str) -> None:
+        self.address.setText(text)
+        self.navigate_address()
 
     def focus_address(self) -> None:
         self.address.setFocus()
@@ -1061,6 +1426,7 @@ QLabel {{ background:transparent; }}
             self.bookmarks.append({"title": view.title() or url, "url": url})
             message = "Lesezeichen gespeichert"
         self._save_bookmarks()
+        self._refresh_suggestions()
         self._update_bookmark_button()
         self.statusBar().showMessage(message, 2200)
 
@@ -1253,7 +1619,7 @@ QLabel {{ background:transparent; }}
         self._save_settings()
         self.statusBar().showMessage(f"{name}: {'aktiviert' if enabled else 'deaktiviert'}", 3000)
 
-    def show_extensions_manager(self) -> None:
+    def show_extensions_manager(self, initial: str | None = None) -> None:
         if self.extension_manager is None:
             QMessageBox.warning(
                 self, "Add-ons nicht verfügbar",
@@ -1262,7 +1628,12 @@ QLabel {{ background:transparent; }}
             return
         try:
             from .extensions_ui import ExtensionsDialog
-            ExtensionsDialog(self, self).exec()
+            dialog = ExtensionsDialog(self, self)
+            if initial == "zip":
+                QTimer.singleShot(0, dialog.install_zip)
+            elif initial == "folder":
+                QTimer.singleShot(0, dialog.install_folder)
+            dialog.exec()
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Add-ons", f"Der Add-on-Manager konnte nicht geöffnet werden: {exc}")
 
@@ -1314,6 +1685,15 @@ QLabel {{ background:transparent; }}
             )
         search_engine.setCurrentIndex(max(0, selected))
 
+        animations = QComboBox(dialog)
+        for label, value in (("Voll – fließende Farben und weiche Übergänge", "full"),
+                             ("Reduziert – nur kurze Übergänge", "reduced"), ("Aus", "off")):
+            animations.addItem(label, value)
+        animations.setCurrentIndex(max(0, animations.findData(self.settings.animations)))
+        titlebar = QCheckBox("Eigene Titelleiste in Theme-Farben (Neustart nötig)", dialog)
+        titlebar.setChecked(self.settings.custom_titlebar)
+        form.addRow("Animationen", animations)
+        form.addRow("Fenster", titlebar)
         form.addRow("Website-Farben", theme_css)
         form.addRow("Werbe- und Trackerschutz", ubol)
         form.addRow("Updates", updates)
@@ -1323,11 +1703,14 @@ QLabel {{ background:transparent; }}
         root.addLayout(form)
 
         actions = QHBoxLayout()
-        addons = QPushButton("Add-ons verwalten …", dialog)
-        addons.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.show_extensions_manager)))
+        addons = QPushButton("Add-ons …", dialog)
+        addons.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.show_addons_center)))
+        shop = QPushButton("Theme-Shop …", dialog)
+        shop.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.show_theme_shop)))
         toolbar = QPushButton("Browserleiste anpassen …", dialog)
         toolbar.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.customize_toolbar)))
         actions.addWidget(addons)
+        actions.addWidget(shop)
         actions.addWidget(toolbar)
         root.addLayout(actions)
 
@@ -1348,6 +1731,11 @@ QLabel {{ background:transparent; }}
         self.settings.page_zoom = float(zoom.value())
         self.settings.search_url = str(search_engine.currentData())
         self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
+        self.settings.animations = str(animations.currentData())
+        self.motion = Motion(self.settings.animations)
+        self.accent_line.set_flow(self.motion.continuous)
+        titlebar_changed = titlebar.isChecked() != self.settings.custom_titlebar
+        self.settings.custom_titlebar = titlebar.isChecked()
         self._refresh_page_theme_script()
         self._sync_extension_states()
         self._save_settings()
@@ -1357,6 +1745,11 @@ QLabel {{ background:transparent; }}
                 view.setZoomFactor(self.settings.page_zoom)
                 self.apply_page_theme(view)
         self.statusBar().showMessage("Einstellungen gespeichert.", 3000)
+        if titlebar_changed:
+            QMessageBox.information(
+                self, "Titelleiste",
+                "Die Änderung der Titelleiste wird nach dem nächsten Start von Nexlori wirksam.",
+            )
 
     def show_spotify_popup(self) -> None:
         try:
@@ -1460,8 +1853,358 @@ QLabel {{ background:transparent; }}
             "Über Nexlori",
             f"<h3>Nexlori {APP_VERSION}</h3><p>Dein Web. Dein Look.</p>"
             "<p>Chromium-WebEngine für moderne Websites, mit lokalen Themes, Spotify Mini-Player und einem verschlüsselten Passwortmanager.</p>"
-            "<p>Updates werden von GitHub Releases bezogen und vor dem Ersetzen der EXE per SHA-256 geprüft.</p>",
+            "<p>Updates werden von GitHub Releases bezogen und vor dem Ersetzen der EXE per SHA-256 geprüft.</p>"
+            f'<p>💬 <a href="{DISCORD_URL}">Nexlori auf Discord</a></p>',
         )
+
+    # ------------------------------------------------------------------ Interne nexlori://-Links
+    def _internal_page_html(self, label: str) -> str | None:
+        if label == "nexlori://addons":
+            return addons_page_html(self.theme)
+        if label == "nexlori://home-network":
+            return home_network_page_html(self.theme)
+        return None
+
+    def _show_internal_page(self, view: QWebEngineView, label: str) -> None:
+        html = self._internal_page_html(label)
+        if html is None:
+            return
+        view._nexlori_start = False
+        view._nexlori_internal = label
+        view.setHtml(html, QUrl("about:blank"))
+        if view is self.current_view():
+            self.address.setText(label)
+            self.address.setModified(False)
+            self.address.set_security("internal")
+
+    def handle_internal_url(self, page: QWebEnginePage, url: QUrl) -> None:
+        """Verarbeitet nexlori://-Links. Sie werden nur von Nexlori-eigenen Seiten angenommen, nie von Webseiten."""
+        view = QWebEngineView.forPage(page)
+        trusted = view is not None and (
+            getattr(view, "_nexlori_start", False) or getattr(view, "_nexlori_internal", None)
+        ) and view.url().toString() in ("", "about:blank")
+        if not trusted:
+            self.statusBar().showMessage("Interne Nexlori-Links funktionieren nur auf Nexlori-Seiten.", 4000)
+            return
+        route = (url.host() + url.path()).rstrip("/")
+        query = QUrlQuery(url)
+        if route == "settings":
+            self.show_settings()
+        elif route == "addons":
+            self._show_internal_page(view, "nexlori://addons")
+        elif route == "addons/builtin":
+            self.show_addons_center()
+        elif route in ("addons/manage", "addons/install-zip", "addons/install-folder"):
+            self.show_extensions_manager({"addons/install-zip": "zip", "addons/install-folder": "folder"}.get(route))
+        elif route == "home-network":
+            self._show_internal_page(view, "nexlori://home-network")
+        elif route == "home-network/open":
+            try:
+                target = normalize_home_target(query.queryItemValue("target", QUrl.ComponentFormattingOption.FullyDecoded))
+            except ValueError as exc:
+                self.statusBar().showMessage(str(exc), 6000)
+                return
+            self.navigate_view(view, target)
+        elif route == "browser/home":
+            self.go_home()
+        elif route == "browser/retry":
+            target = query.queryItemValue("url", QUrl.ComponentFormattingOption.FullyDecoded)
+            if urlsplit(target).scheme.lower() in {"http", "https"}:
+                self.navigate_view(view, target)
+        elif route == "community/discord":
+            self.open_discord()
+        else:
+            self.statusBar().showMessage("Unbekannter Nexlori-Link.", 4000)
+
+    # ------------------------------------------------------------------ Navigation: Saubere Links & HTTPS bevorzugen
+    def rewrite_navigation(self, page: QWebEnginePage, url: QUrl, navigation_type) -> str | None:
+        """Gibt eine geänderte Zieladresse zurück, wenn ein Add-on (Saubere Links, HTTPS bevorzugen) eingreift."""
+        kinds = QWebEnginePage.NavigationType
+        if navigation_type not in (kinds.NavigationTypeLinkClicked, kinds.NavigationTypeTyped):
+            return None
+        text = url.toString()
+        target = text
+        addons = self.settings.builtin_addons
+        if is_enabled(addons, "clean-urls"):
+            target = strip_tracking_params(target)
+        if (
+            is_enabled(addons, "https-first")
+            and url.scheme().lower() == "http"
+            and (url.host() or "").lower() not in self._http_allowed_hosts
+        ):
+            upgraded = upgrade_to_https(target)
+            if upgraded:
+                page._https_origin = target
+                target = upgraded
+        return target if target != text else None
+
+    def _offer_http_fallback(self, view: QWebEngineView, origin: str) -> None:
+        if self.tabs.indexOf(view) < 0 or self._closing:
+            return
+        host = urlsplit(origin).hostname or origin
+        answer = QMessageBox.question(
+            self, "HTTPS nicht verfügbar",
+            f"„{host}“ unterstützt kein HTTPS oder ist nicht erreichbar.\n\n"
+            "Seite trotzdem unverschlüsselt (HTTP) öffnen? Eingaben auf dieser Seite könnten von Dritten mitgelesen werden.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._http_allowed_hosts.add(host.lower())
+            view.setUrl(QUrl(origin))
+
+    # ------------------------------------------------------------------ Eingebaute Add-ons
+    def _refresh_addons_script(self) -> None:
+        """Setzt das Skript aller aktiven Seiten-Add-ons neu (wird bei jedem neuen Dokument eingesetzt)."""
+        scripts = self.profile.scripts()
+        if self._addons_script is not None:
+            try:
+                scripts.remove(self._addons_script)
+            except (RuntimeError, TypeError):
+                pass
+            self._addons_script = None
+        source = build_addons_script(self.settings.builtin_addons, accent=self.theme.accent, bg=self.theme.bg)
+        if not source:
+            return
+        script = QWebEngineScript()
+        script.setName("NexloriAddons")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.ApplicationWorld)
+        script.setRunsOnSubFrames(False)
+        script.setSourceCode(source)
+        scripts.insert(script)
+        self._addons_script = script
+
+    def set_builtin_addon(self, addon_id: str, enabled: bool) -> None:
+        self.settings.builtin_addons[addon_id] = bool(enabled)
+        self._save_settings()
+        self._refresh_addons_script()
+        self._refresh_tools_menu()
+        addon = next((a for a in ADDONS if a.id == addon_id), None)
+        view = self.current_view()
+        if addon is not None and addon.kind == "script" and view is not None and not getattr(view, "_nexlori_start", False):
+            view.reload()
+        if addon_id == "tab-sleep" and not enabled:
+            for index in range(self.tabs.count()):
+                widget = self.tabs.widget(index)
+                if isinstance(widget, QWebEngineView):
+                    self._wake_view(widget)
+
+    def set_tab_sleep_minutes(self, minutes: int) -> None:
+        self.settings.tab_sleep_minutes = int(minutes)
+        self._save_settings()
+
+    def show_addons_center(self) -> None:
+        from .addons_ui import AddonsDialog
+        AddonsDialog(self, self).exec()
+
+    def _refresh_tools_menu(self) -> None:
+        self.tools_menu.clear()
+        labels = {"reader": "Lesemodus", "pdf-export": "Seite als PDF speichern …", "screenshot": "Screenshot speichern …"}
+        shortcuts = {"reader": "Ctrl+Alt+R", "pdf-export": "Ctrl+P", "screenshot": "Ctrl+Alt+S"}
+        added = 0
+        for addon_id, label in labels.items():
+            if is_enabled(self.settings.builtin_addons, addon_id):
+                self.tools_menu.addAction(label, lambda a=addon_id: self._run_tool(a), QKeySequence(shortcuts[addon_id]))
+                added += 1
+        if not added:
+            action = self.tools_menu.addAction("Keine Werkzeuge aktiv (siehe Nexlori-Add-ons)")
+            action.setEnabled(False)
+
+    def _run_tool(self, addon_id: str) -> None:
+        if not is_enabled(self.settings.builtin_addons, addon_id):
+            return
+        {"reader": self.reader_mode, "pdf-export": self.save_page_pdf, "screenshot": self.save_screenshot}[addon_id]()
+
+    def _tool_view(self) -> QWebEngineView | None:
+        view = self.current_view()
+        if view is None or getattr(view, "_nexlori_start", False) or view.url().toString() in ("", "about:blank"):
+            self.statusBar().showMessage("Öffne zuerst eine Webseite.", 3000)
+            return None
+        return view
+
+    def reader_mode(self) -> None:
+        view = self._tool_view()
+        if view is None:
+            return
+        script = reader_script(bg=self.theme.bg, fg=self.theme.fg, accent=self.theme.accent)
+        view.page().runJavaScript(script, self._reader_result)
+
+    def _reader_result(self, result) -> None:
+        if result == "no-article":
+            self.statusBar().showMessage("Auf dieser Seite wurde kein Artikel erkannt.", 3500)
+
+    @staticmethod
+    def _safe_file_stem(title: str, fallback: str) -> str:
+        stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", title).strip(" ._")[:80]
+        return stem or fallback
+
+    def save_page_pdf(self) -> None:
+        view = self._tool_view()
+        if view is None:
+            return
+        stem = self._safe_file_stem(view.title(), "Seite")
+        initial = str(Path.home() / "Downloads" / f"{stem}.pdf")
+        filename, _ = QFileDialog.getSaveFileName(self, "Seite als PDF speichern", initial, "PDF-Dateien (*.pdf)")
+        if not filename:
+            return
+        if not filename.lower().endswith(".pdf"):
+            filename += ".pdf"
+        view.page().printToPdf(filename)
+        self.statusBar().showMessage("PDF wird erstellt …", 3000)
+
+    def _on_pdf_finished(self, path: str, ok: bool) -> None:
+        name = Path(path).name
+        self.statusBar().showMessage(
+            f"PDF gespeichert: {name}" if ok else "Das PDF konnte nicht erstellt werden.", 5000
+        )
+
+    def save_screenshot(self) -> None:
+        view = self._tool_view()
+        if view is None:
+            return
+        pixmap = view.grab()
+        if pixmap.isNull():
+            self.statusBar().showMessage("Der Screenshot konnte nicht erstellt werden.", 4000)
+            return
+        stem = self._safe_file_stem(view.title(), "Screenshot")
+        initial = str(Path.home() / "Downloads" / f"{stem}.png")
+        filename, _ = QFileDialog.getSaveFileName(self, "Screenshot speichern", initial, "PNG-Bilder (*.png)")
+        if not filename:
+            return
+        if not filename.lower().endswith(".png"):
+            filename += ".png"
+        ok = pixmap.save(filename, "PNG")
+        self.statusBar().showMessage(
+            f"Screenshot gespeichert: {Path(filename).name}" if ok else "Der Screenshot konnte nicht gespeichert werden.", 5000
+        )
+
+    # ------------------------------------------------------------------ Tabs schlafen legen
+    def _start_tab_sleep_timer(self) -> None:
+        self._sleep_timer = QTimer(self)
+        self._sleep_timer.setInterval(60_000)
+        self._sleep_timer.timeout.connect(self._sleep_tick)
+        self._sleep_timer.start()
+
+    def _sleep_tick(self) -> None:
+        now = time.monotonic()
+        current = self.current_view()
+        if current is not None:
+            self._tab_activity[current] = now
+        if not is_enabled(self.settings.builtin_addons, "tab-sleep") or self._closing:
+            return
+        skip = {
+            view for view in self._tab_activity
+            if view is current or getattr(view, "_nexlori_start", False) or getattr(view, "_nexlori_loading", False)
+            or self.tabs.indexOf(view) < 0 or view.page().recentlyAudible()
+        }
+        for view in tabs_to_sleep(self._tab_activity, now, self.settings.tab_sleep_minutes, skip):
+            self._sleep_view(view)
+
+    def _sleep_view(self, view: QWebEngineView) -> None:
+        page = view.page()
+        if page.lifecycleState() == QWebEnginePage.LifecycleState.Discarded:
+            return
+        page.setLifecycleState(QWebEnginePage.LifecycleState.Discarded)
+        index = self.tabs.indexOf(view)
+        if index >= 0 and not self.tabs.tabText(index).startswith("💤"):
+            self.tabs.setTabText(index, "💤 " + self.tabs.tabText(index))
+
+    def _wake_view(self, view: QWebEngineView) -> None:
+        page = view.page()
+        if page.lifecycleState() != QWebEnginePage.LifecycleState.Active:
+            page.setLifecycleState(QWebEnginePage.LifecycleState.Active)
+        index = self.tabs.indexOf(view)
+        if index >= 0 and self.tabs.tabText(index).startswith("💤"):
+            self._update_tab_title(view, view.title())
+
+    # ------------------------------------------------------------------ Vollbild (z. B. YouTube-Videos)
+    def _on_fullscreen_requested(self, request) -> None:
+        request.accept()
+        self._set_html_fullscreen(bool(request.toggleOn()))
+
+    def _set_html_fullscreen(self, on: bool) -> None:
+        if on == self._html_fullscreen:
+            return
+        self._html_fullscreen = on
+        chrome = [
+            self.title_bar, self.accent_line, self.tab_row_widget, self.toolbar_widget, self.find_bar,
+            self.progress, self._status_bar,
+        ]
+        if on:
+            self._fullscreen_restore = "max" if self.isMaximized() else "normal"
+            self._chrome_visibility = {id(w): w.isVisible() for w in chrome if w is not None}
+            for widget in chrome:
+                if widget is not None:
+                    widget.hide()
+            self.showFullScreen()
+        else:
+            for widget in chrome:
+                if widget is not None and getattr(self, "_chrome_visibility", {}).get(id(widget), True):
+                    widget.show()
+            if self._fullscreen_restore == "max":
+                self.showMaximized()
+            else:
+                self.showNormal()
+        self._sync_window_state()
+
+    # ------------------------------------------------------------------ Theme-Shop
+    def show_theme_shop(self) -> None:
+        from .theme_shop_ui import ThemeShopDialog
+        ThemeShopDialog(self, self).exec()
+
+    def remove_installed_theme(self, name: str) -> None:
+        """Entfernt ein Shop-Theme; ist es aktiv oder Teil einer Kombination, wird vorher auf „Dunkel“ gewechselt."""
+        if name == self.settings.theme or name in self.settings.theme_mix:
+            self.set_theme("dunkel")
+        self.theme_store.remove(name)
+        self.settings.pride_favorites = [n for n in self.settings.pride_favorites if n != name]
+        self.rebuild_theme_menu()
+        self._save_settings()
+
+    # ------------------------------------------------------------------ Fensterzustand
+    def _sync_window_state(self) -> None:
+        if not hasattr(self, "accent_line"):
+            return
+        if self.title_bar is not None:
+            self.title_bar.set_maximized(self.isMaximized())
+        if self.resize_frame is not None:
+            self.resize_frame.set_resizable(not (self.isMaximized() or self.isFullScreen()))
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._sync_window_state()
+        elif event.type() == QEvent.Type.ActivationChange and hasattr(self, "accent_line"):
+            self.accent_line.pause(not self.isActiveWindow())
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if self._first_show:
+            self._first_show = False
+            self.accent_line.set_flow(self.motion.continuous)
+            cascade_in([self.title_bar, self.tab_row_widget, self.toolbar_widget], self.motion)
+        if not self.custom_titlebar:
+            apply_native_titlebar_colors(self, self.theme)
+
+    def _release_web_views(self) -> None:
+        """Seiten vor dem Profil freigeben (verhindert „Release of profile requested but WebEnginePage still not deleted“)."""
+        for index in range(self.tabs.count() - 1, -1, -1):
+            view = self.tabs.widget(index)
+            self.tabs.removeTab(index)
+            if isinstance(view, QWebEngineView):
+                page = view.page()
+                view.setPage(None)
+                page.deleteLater()
+                view.deleteLater()
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._closing = True
+        self._sleep_timer.stop()
+        self.accent_line.pause(True)
+        self._save_settings()
+        self._save_bookmarks()
+        self._release_web_views()
+        super().closeEvent(event)
 
     def _save_settings(self) -> None:
         try:
@@ -1469,10 +2212,6 @@ QLabel {{ background:transparent; }}
         except (OSError, ValueError):
             self.statusBar().showMessage("Einstellungen konnten nicht gespeichert werden.", 3000)
 
-    def closeEvent(self, event) -> None:  # noqa: N802
-        self._save_settings()
-        self._save_bookmarks()
-        super().closeEvent(event)
 
 
 def _selftest_ubol_package() -> tuple[bool, str]:
@@ -1551,8 +2290,10 @@ def run(argv: list[str] | None = None) -> int:
             return 5
 
     settings_path = default_settings_path()
+    # Installierte Shop-Themes müssen bekannt sein, bevor die Einstellungen geprüft werden.
+    ThemeStore(default_theme_dir(settings_path)).load_into_registry()
     try:
-        settings = Settings.load(settings_path)
+        settings = Settings.load_lenient(settings_path)
     except (ValueError, OSError):
         settings = Settings()
 
@@ -1565,6 +2306,7 @@ def run(argv: list[str] | None = None) -> int:
     if argv:
         start_url = normalize_input(" ".join(arg for arg in argv if not arg.startswith("-")), settings.search_url)
     window = NexloriWindow(settings, settings_path, start_url)
+    app.installEventFilter(DialogThemer(lambda: window.theme, app))
     window.show()
     # CI runners may not expose a native interactive desktop/window handle.
     # A marker lets the Windows smoke test verify that construction reached show().

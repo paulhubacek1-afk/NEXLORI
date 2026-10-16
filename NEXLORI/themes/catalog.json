@@ -1,0 +1,718 @@
+{
+ "format": 1,
+ "themes": [
+  {
+   "name": "nord",
+   "label": "Nord",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Kühle Polarfarben, ruhig und klar.",
+   "bg": "#2E3440",
+   "surface": "#3B4252",
+   "fg": "#ECEFF4",
+   "accent": "#88C0D0",
+   "stripes": [
+    "#5E81AC",
+    "#81A1C1",
+    "#88C0D0",
+    "#8FBCBB"
+   ]
+  },
+  {
+   "name": "dracula",
+   "label": "Dracula",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Der Klassiker mit Violett und Pink.",
+   "bg": "#282A36",
+   "surface": "#343746",
+   "fg": "#F8F8F2",
+   "accent": "#BD93F9",
+   "stripes": [
+    "#BD93F9",
+    "#FF79C6",
+    "#8BE9FD"
+   ]
+  },
+  {
+   "name": "monokai",
+   "label": "Monokai",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Bunte Akzente auf warmem Dunkelgrau.",
+   "bg": "#272822",
+   "surface": "#3E3D32",
+   "fg": "#F8F8F2",
+   "accent": "#A6E22E",
+   "stripes": [
+    "#F92672",
+    "#FD971F",
+    "#E6DB74",
+    "#A6E22E",
+    "#66D9EF",
+    "#AE81FF"
+   ]
+  },
+  {
+   "name": "gruvbox-dark",
+   "label": "Gruvbox Dunkel",
+   "category": "Retro",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Warme Retro-Farben mit hohem Lesekomfort.",
+   "bg": "#282828",
+   "surface": "#3C3836",
+   "fg": "#EBDBB2",
+   "accent": "#FABD2F",
+   "stripes": [
+    "#CC241D",
+    "#D79921",
+    "#98971A",
+    "#458588",
+    "#B16286"
+   ]
+  },
+  {
+   "name": "tokyo-night",
+   "label": "Tokyo Night",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Nächtliche Neonstadt in Blau und Violett.",
+   "bg": "#1A1B26",
+   "surface": "#24283B",
+   "fg": "#C0CAF5",
+   "accent": "#7AA2F7",
+   "stripes": [
+    "#7AA2F7",
+    "#BB9AF7",
+    "#7DCFFF"
+   ]
+  },
+  {
+   "name": "catppuccin-mocha",
+   "label": "Catppuccin Mocha",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Sanfte Pastelltöne auf dunklem Grund.",
+   "bg": "#1E1E2E",
+   "surface": "#313244",
+   "fg": "#CDD6F4",
+   "accent": "#CBA6F7",
+   "stripes": [
+    "#F5C2E7",
+    "#CBA6F7",
+    "#89B4FA",
+    "#94E2D5",
+    "#A6E3A1"
+   ]
+  },
+  {
+   "name": "rose-pine",
+   "label": "Rosé Pine",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Gedämpft, elegant, mit rosigem Akzent.",
+   "bg": "#191724",
+   "surface": "#26233A",
+   "fg": "#E0DEF4",
+   "accent": "#EBBCBA",
+   "stripes": [
+    "#EB6F92",
+    "#F6C177",
+    "#EBBCBA",
+    "#31748F",
+    "#9CCFD8",
+    "#C4A7E7"
+   ]
+  },
+  {
+   "name": "one-dark",
+   "label": "One Dark",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Vertraut aus vielen Code-Editoren.",
+   "bg": "#282C34",
+   "surface": "#353B45",
+   "fg": "#ABB2BF",
+   "accent": "#61AFEF",
+   "stripes": [
+    "#E06C75",
+    "#D19A66",
+    "#E5C07B",
+    "#98C379",
+    "#56B6C2",
+    "#61AFEF",
+    "#C678DD"
+   ]
+  },
+  {
+   "name": "iceberg",
+   "label": "Eisberg",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Kühles Blaugrau, angenehm für lange Sitzungen.",
+   "bg": "#161821",
+   "surface": "#1E2132",
+   "fg": "#C6C8D1",
+   "accent": "#84A0C6",
+   "stripes": [
+    "#84A0C6",
+    "#89B8C2",
+    "#B4BE82"
+   ]
+  },
+  {
+   "name": "obsidian",
+   "label": "Obsidian",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Tiefschwarz mit goldenem Akzent.",
+   "bg": "#0D0D0F",
+   "surface": "#1A1A1F",
+   "fg": "#EDEDF2",
+   "accent": "#C9A227",
+   "stripes": [
+    "#3A2F0B",
+    "#C9A227",
+    "#F2D675"
+   ]
+  },
+  {
+   "name": "espresso",
+   "label": "Espresso",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Dunkle Röstung mit Karamell.",
+   "bg": "#1B1411",
+   "surface": "#2B1F1A",
+   "fg": "#F6EBDD",
+   "accent": "#D9A066",
+   "stripes": [
+    "#4B2E1E",
+    "#8C5A3C",
+    "#D9A066"
+   ]
+  },
+  {
+   "name": "copper",
+   "label": "Kupfer",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Warmer Metallglanz.",
+   "bg": "#17110E",
+   "surface": "#28201B",
+   "fg": "#F5E9E1",
+   "accent": "#E08A5A",
+   "stripes": [
+    "#8A4B2D",
+    "#E08A5A",
+    "#F2C4A0"
+   ]
+  },
+  {
+   "name": "moss",
+   "label": "Moos",
+   "category": "Natur",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Frisches Grün auf Waldboden.",
+   "bg": "#11160F",
+   "surface": "#1E2A1A",
+   "fg": "#EEF6E8",
+   "accent": "#A3D977",
+   "stripes": [
+    "#2C4A1F",
+    "#6BA83A",
+    "#A3D977"
+   ]
+  },
+  {
+   "name": "deep-sea",
+   "label": "Tiefsee",
+   "category": "Natur",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Dunkles Wasser mit türkisem Leuchten.",
+   "bg": "#06141F",
+   "surface": "#0D2636",
+   "fg": "#E3F6FF",
+   "accent": "#3DD6D0",
+   "stripes": [
+    "#0A3D62",
+    "#1B7F9E",
+    "#3DD6D0"
+   ]
+  },
+  {
+   "name": "sunset",
+   "label": "Sonnenuntergang",
+   "category": "Natur",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Verlauf von Rot nach Goldgelb.",
+   "bg": "#1F1218",
+   "surface": "#36202A",
+   "fg": "#FFF1EA",
+   "accent": "#FF8E6E",
+   "stripes": [
+    "#FF4D6D",
+    "#FF8E6E",
+    "#FFC26B",
+    "#FFE29A"
+   ]
+  },
+  {
+   "name": "lava",
+   "label": "Lava",
+   "category": "Natur",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Glühende Glut auf Basalt.",
+   "bg": "#1A0A0A",
+   "surface": "#2E1210",
+   "fg": "#FFEDE6",
+   "accent": "#FF5A36",
+   "stripes": [
+    "#7A0C0C",
+    "#C21807",
+    "#FF5A36",
+    "#FFB000"
+   ]
+  },
+  {
+   "name": "galaxy",
+   "label": "Galaxie",
+   "category": "Natur",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Sternennebel in Violett und Rosa.",
+   "bg": "#0B0720",
+   "surface": "#1A1240",
+   "fg": "#EFEAFF",
+   "accent": "#9B8CFF",
+   "stripes": [
+    "#241B5A",
+    "#5B3FD1",
+    "#9B8CFF",
+    "#FF8BD1"
+   ]
+  },
+  {
+   "name": "neon-tokyo",
+   "label": "Neon Tokyo",
+   "category": "Neon",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Leuchtreklame im Regen.",
+   "bg": "#0B0B14",
+   "surface": "#171726",
+   "fg": "#F2F2FF",
+   "accent": "#00F0FF",
+   "stripes": [
+    "#FF2079",
+    "#9D4EDD",
+    "#00F0FF"
+   ]
+  },
+  {
+   "name": "synthwave",
+   "label": "Synthwave",
+   "category": "Neon",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "80er-Retrowave in Pink und Cyan.",
+   "bg": "#241B2F",
+   "surface": "#34294F",
+   "fg": "#F4EEFF",
+   "accent": "#FF7EDB",
+   "stripes": [
+    "#FF7EDB",
+    "#B893CE",
+    "#36F9F6",
+    "#FEDE5D"
+   ]
+  },
+  {
+   "name": "vaporwave",
+   "label": "Vaporwave",
+   "category": "Neon",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Pastellneon, glitzernd und verträumt.",
+   "bg": "#1B1030",
+   "surface": "#2B1B4D",
+   "fg": "#F5EBFF",
+   "accent": "#FF71CE",
+   "stripes": [
+    "#FF71CE",
+    "#B967FF",
+    "#01CDFE",
+    "#05FFA1",
+    "#FFFB96"
+   ]
+  },
+  {
+   "name": "matrix",
+   "label": "Matrix",
+   "category": "Neon",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Grüner Code-Regen.",
+   "bg": "#020B05",
+   "surface": "#0B1F12",
+   "fg": "#D6FFE0",
+   "accent": "#00FF66",
+   "stripes": [
+    "#003B1A",
+    "#00A844",
+    "#00FF66"
+   ]
+  },
+  {
+   "name": "cyber-lime",
+   "label": "Cyber Limette",
+   "category": "Neon",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Grelles Limettengrün auf Schwarz.",
+   "bg": "#0C0F08",
+   "surface": "#1A2110",
+   "fg": "#F1FFD6",
+   "accent": "#C6FF00",
+   "stripes": [
+    "#6B8E00",
+    "#C6FF00",
+    "#F4FF81"
+   ]
+  },
+  {
+   "name": "amethyst",
+   "label": "Amethyst",
+   "category": "Edelstein",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Violetter Kristall.",
+   "bg": "#170F24",
+   "surface": "#271A3F",
+   "fg": "#F4ECFF",
+   "accent": "#D19BFF",
+   "stripes": [
+    "#5E2A8C",
+    "#A55EEA",
+    "#D19BFF"
+   ]
+  },
+  {
+   "name": "emerald",
+   "label": "Smaragd",
+   "category": "Edelstein",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Tiefgrün mit Glanz.",
+   "bg": "#06180F",
+   "surface": "#0F2E1E",
+   "fg": "#E6FFF1",
+   "accent": "#34D399",
+   "stripes": [
+    "#065F46",
+    "#10B981",
+    "#34D399"
+   ]
+  },
+  {
+   "name": "ruby",
+   "label": "Rubin",
+   "category": "Edelstein",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Leuchtendes Rot.",
+   "bg": "#1C0B10",
+   "surface": "#331520",
+   "fg": "#FFEAEF",
+   "accent": "#FF6B8A",
+   "stripes": [
+    "#7F1D3A",
+    "#E11D48",
+    "#FF6B8A"
+   ]
+  },
+  {
+   "name": "sapphire",
+   "label": "Saphir",
+   "category": "Edelstein",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Königsblau.",
+   "bg": "#08142A",
+   "surface": "#11264D",
+   "fg": "#EAF2FF",
+   "accent": "#6AA7FF",
+   "stripes": [
+    "#1E3A8A",
+    "#3B82F6",
+    "#6AA7FF"
+   ]
+  },
+  {
+   "name": "blood-moon",
+   "label": "Blutmond",
+   "category": "Dunkel",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Düster mit rotem Schimmer.",
+   "bg": "#140709",
+   "surface": "#26101A",
+   "fg": "#FBE9EC",
+   "accent": "#FF4D6A",
+   "stripes": [
+    "#4A0D1A",
+    "#9B1B30",
+    "#FF4D6A"
+   ]
+  },
+  {
+   "name": "paper",
+   "label": "Papier",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Cremeweiß wie gutes Schreibpapier.",
+   "bg": "#FBF8F1",
+   "surface": "#EFE9DA",
+   "fg": "#2A2723",
+   "accent": "#8A4B14",
+   "stripes": [
+    "#8A4B14",
+    "#C98A3B",
+    "#E7C27D"
+   ]
+  },
+  {
+   "name": "solarized-light",
+   "label": "Solarized Hell",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Der Hell-Klassiker mit ruhigem Kontrast.",
+   "bg": "#FDF6E3",
+   "surface": "#EEE8D5",
+   "fg": "#073642",
+   "accent": "#1F6FA8",
+   "stripes": [
+    "#B58900",
+    "#CB4B16",
+    "#DC322F",
+    "#6C71C4",
+    "#268BD2",
+    "#2AA198"
+   ]
+  },
+  {
+   "name": "sky",
+   "label": "Himmel",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Klares Himmelblau.",
+   "bg": "#F3F9FF",
+   "surface": "#E1EEFA",
+   "fg": "#0F2236",
+   "accent": "#1D6FD1",
+   "stripes": [
+    "#1D6FD1",
+    "#4DA3FF",
+    "#A5D2FF"
+   ]
+  },
+  {
+   "name": "mint-light",
+   "label": "Minze Hell",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Frisch und leicht.",
+   "bg": "#F2FBF6",
+   "surface": "#DFF2E8",
+   "fg": "#10281B",
+   "accent": "#1F7A4D",
+   "stripes": [
+    "#1F7A4D",
+    "#4CBF86",
+    "#A8E6C5"
+   ]
+  },
+  {
+   "name": "blossom",
+   "label": "Blüte",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Zartes Rosa.",
+   "bg": "#FFF5F8",
+   "surface": "#FBE3EC",
+   "fg": "#3A1626",
+   "accent": "#B8326B",
+   "stripes": [
+    "#B8326B",
+    "#F06EA0",
+    "#FFB6D0"
+   ]
+  },
+  {
+   "name": "lemon",
+   "label": "Zitrone",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Sonniges Gelb.",
+   "bg": "#FFFCEB",
+   "surface": "#F7F0C8",
+   "fg": "#2C2A10",
+   "accent": "#7A6400",
+   "stripes": [
+    "#7A6400",
+    "#D9B800",
+    "#FFE45C"
+   ]
+  },
+  {
+   "name": "lilac",
+   "label": "Flieder",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Sanftes Violett.",
+   "bg": "#F8F4FF",
+   "surface": "#E9E0FA",
+   "fg": "#2A1B45",
+   "accent": "#6B3FD0",
+   "stripes": [
+    "#6B3FD0",
+    "#A07CF0",
+    "#D2BFFF"
+   ]
+  },
+  {
+   "name": "apricot",
+   "label": "Aprikose",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Warmes Orange.",
+   "bg": "#FFF6F0",
+   "surface": "#FBE5D8",
+   "fg": "#3A1E12",
+   "accent": "#B5501F",
+   "stripes": [
+    "#B5501F",
+    "#F08A55",
+    "#FFC9A5"
+   ]
+  },
+  {
+   "name": "latte",
+   "label": "Latte",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Milchkaffee-Töne.",
+   "bg": "#F7F1EA",
+   "surface": "#E9DDCF",
+   "fg": "#2D221A",
+   "accent": "#8B5A33",
+   "stripes": [
+    "#8B5A33",
+    "#C49A6C",
+    "#E8D2B4"
+   ]
+  },
+  {
+   "name": "cloud",
+   "label": "Wolke",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Neutral, modern und aufgeräumt.",
+   "bg": "#F6F7F9",
+   "surface": "#E6E9EE",
+   "fg": "#1C2430",
+   "accent": "#3B5BDB",
+   "stripes": [
+    "#3B5BDB",
+    "#748FFC",
+    "#BAC8FF"
+   ]
+  },
+  {
+   "name": "glacier",
+   "label": "Gletscher",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Eisiges Türkis.",
+   "bg": "#F1FAFB",
+   "surface": "#DCEFF2",
+   "fg": "#0E2A2F",
+   "accent": "#0F7C8C",
+   "stripes": [
+    "#0F7C8C",
+    "#3DB9C9",
+    "#A6E3EB"
+   ]
+  },
+  {
+   "name": "sand",
+   "label": "Sand",
+   "category": "Hell",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Dünenfarben.",
+   "bg": "#FAF5EA",
+   "surface": "#EFE4CC",
+   "fg": "#2E2614",
+   "accent": "#946200",
+   "stripes": [
+    "#946200",
+    "#E0A526",
+    "#F6D77C"
+   ]
+  },
+  {
+   "name": "kontrast-cyan",
+   "label": "Kontrast Cyan",
+   "category": "Kontrast",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Maximaler Kontrast mit cyanfarbenem Akzent.",
+   "bg": "#000000",
+   "surface": "#0A0A0A",
+   "fg": "#FFFFFF",
+   "accent": "#00E5FF",
+   "stripes": []
+  },
+  {
+   "name": "kontrast-hell",
+   "label": "Kontrast Hell",
+   "category": "Kontrast",
+   "author": "Nexlori",
+   "rev": 1,
+   "description": "Schwarz auf Weiß mit kräftigem Blau.",
+   "bg": "#FFFFFF",
+   "surface": "#F2F2F2",
+   "fg": "#000000",
+   "accent": "#0033CC",
+   "stripes": []
+  }
+ ]
+}

@@ -114,3 +114,14 @@ so läuft alles ohne Betriebssystem-Abhängigkeit. Die Fenster-Tests (`tests/tes
 führt auf einem Windows-Runner nacheinander aus: Tests → Icon erzeugen → EXE bauen → **Selbsttest der EXE** →
 SHA-256-Prüfsumme → Artefakt (bei einem `v*`-Tag zusätzlich ein GitHub-Release). Das Icon wird aus `nexlori/icon.py`
 gezeichnet, es liegt keine Binärdatei im Repository. Die EXE ist unsigniert (SmartScreen-Hinweis beim ersten Start).
+
+
+## Oberfläche und Erweiterungen ab 1.1.0
+
+- `tabstrip.py`: Tab-Leiste und Seitenstapel sind getrennte Widgets (`TabStrip`, gleiche Methoden wie `QTabWidget`). Dadurch liegt die Such-/Adressleiste zwischen Tabs und Webseite.
+- `titlebar.py`: rahmenlose Titelleiste (`TitleBar`), Größenänderung am Rand (`ResizeFrame`, nutzt `startSystemMove`/`startSystemResize`) und Einfärben der Windows-Titelleiste per DWM (`apply_native_titlebar_colors`, `DialogThemer`).
+- `animations.py`: `Motion` (Voll/Reduziert/Aus), `AccentLine` (fließender Verlauf), Überblendung beim Theme-Wechsel, gestaffeltes Einblenden. Der Webseiten-Bereich wird nie überblendet (Chromium-Inhalt).
+- `core/theme_shop.py` (ohne Qt): Katalog laden/prüfen und `ThemeStore` (installierte Themes als kleine JSON-Dateien im Profilordner `themes/`). `core/themes.py` führt eine Registry für installierte Themes. `theme_shop_ui.py` ist der Dialog.
+- `core/builtin_addons.py`, `core/privacy.py` (ohne Qt): Definition der eingebauten Add-ons, erzeugte Skripte (nur Top-Frame, isolierter Skript-Kontext) und die Logik für Saubere Links, HTTPS-Aufwertung und Tab-Schlaf. `addons_ui.py` ist die Add-on-Zentrale.
+- `links.py`: feste, vom Nutzer nicht änderbare Verweise (GitHub, Feedback, Discord).
+- Interne `nexlori://`-Links werden in `NexloriWindow.handle_internal_url` verarbeitet und nur von Nexlori-eigenen Seiten akzeptiert.
