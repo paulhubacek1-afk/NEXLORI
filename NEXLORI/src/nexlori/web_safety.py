@@ -221,6 +221,7 @@ def addons_page_html(theme) -> str:
     body = """<span class="eyebrow">Nexlori · Erweiterungen</span><h1>Dein Browser. Deine Add-ons.</h1>
 <p>Installiere zusätzliche Erweiterungen aus ZIP-Dateien oder entpackten Ordnern. Nexlori unterstützt derzeit Chromium-Manifest-V3. Lies vor jeder Installation die angeforderten Berechtigungen.</p>
 <div class="grid">
+<a class="tile" href="nexlori://addons/builtin"><div class="icon">✦</div><strong>Nexlori-Add-ons</strong><p class="muted">Eingebaute Add-ons: dunkle Seiten, Lesemodus, Saubere Links und mehr.</p></a>
 <a class="tile" href="nexlori://addons/install-zip"><div class="icon">＋</div><strong>ZIP installieren</strong><p class="muted">Ein Add-on-Paket von deinem Computer auswählen.</p></a>
 <a class="tile" href="nexlori://addons/install-folder"><div class="icon">▣</div><strong>Ordner installieren</strong><p class="muted">Einen bereits entpackten Add-on-Ordner mit manifest.json auswählen.</p></a>
 <a class="tile" href="nexlori://addons/manage"><div class="icon">⚙</div><strong>Installierte Add-ons</strong><p class="muted">Erweiterungen aktivieren, deaktivieren oder entfernen.</p></a>
