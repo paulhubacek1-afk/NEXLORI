@@ -1,2 +1,0 @@
-[console_scripts]
-nexlori = nexlori.__main__:main
