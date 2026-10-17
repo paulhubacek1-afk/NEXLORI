@@ -4,16 +4,21 @@ import os
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-pytest.importorskip("PySide6.QtWidgets")
 
-from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtGui import QColor, QImage  # noqa: E402
-from PySide6.QtWidgets import QApplication, QLabel, QWidget  # noqa: E402
+# Auf Rechnern ohne Qt-Systembibliotheken (z. B. libEGL auf manchen CI-Runnern) schlägt schon der Import fehl.
+# Neuere pytest-Versionen überspringen bei pytest.importorskip nur noch ModuleNotFoundError, deshalb hier von Hand.
+try:
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor, QImage
+    from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
-from nexlori.animations import AccentLine, Motion  # noqa: E402
-from nexlori.core.themes import BUILTIN_THEMES  # noqa: E402
-from nexlori.tabstrip import TabStrip  # noqa: E402
-from nexlori.titlebar import RESIZE_MARGIN, ResizeFrame, TitleBar, apply_native_titlebar_colors, colorref  # noqa: E402
+    from nexlori.animations import AccentLine, Motion
+    from nexlori.tabstrip import TabStrip
+    from nexlori.titlebar import RESIZE_MARGIN, ResizeFrame, TitleBar, apply_native_titlebar_colors, colorref
+except ImportError as exc:  # pragma: no cover - hängt von der Umgebung ab
+    pytest.skip(f"Qt-Oberfläche nicht verfügbar: {exc}", allow_module_level=True)
+
+from nexlori.core.themes import BUILTIN_THEMES
 
 
 @pytest.fixture(scope="module")

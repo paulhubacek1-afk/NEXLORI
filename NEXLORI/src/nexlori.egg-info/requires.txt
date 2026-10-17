@@ -1,0 +1,9 @@
+Pillow>=10.1
+PySide6<7,>=6.10
+cryptography>=42.0
+
+[dev]
+pytest>=8
+
+[gaming]
+psutil>=5.9
