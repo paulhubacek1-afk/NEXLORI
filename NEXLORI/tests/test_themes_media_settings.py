@@ -169,3 +169,11 @@ def test_invalid_values_are_rejected_and_unknown_keys_ignored():
     with pytest.raises(ValueError, match="autoplay"):
         Settings.from_dict({"autoplay": "vielleicht"})
     assert Settings.from_dict({"future_option": 1, "mode": "battery"}).mode == "battery"
+
+
+def test_theme_combinations_support_eight_palettes_and_reject_nine():
+    from nexlori.core.themes import combine_themes
+    names = ["dunkel", "gothic", "cyberpunk", "forest", "ocean", "sakura", "mitternacht", "kaffee"]
+    assert len(combine_themes(names).stripes) >= 8
+    with pytest.raises(ValueError, match="höchstens acht"):
+        combine_themes(names + ["aurora"])

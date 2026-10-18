@@ -57,10 +57,13 @@ def y_of(win, widget):
     return widget.mapTo(win, QPoint(0, 0)).y()
 
 
-def test_search_bar_is_above_the_web_page(window):
+def test_tabs_and_search_bar_are_above_the_web_page(window):
     view = window.current_view()
-    assert y_of(window, window.title_bar) < y_of(window, window.tab_row_widget)
-    assert y_of(window, window.tab_row_widget) < y_of(window, window.toolbar_widget)
+    if window.title_bar is not None:
+        assert window.tabs.bar.parentWidget() is window.title_bar.tabs_host
+        assert y_of(window, window.title_bar) <= y_of(window, window.tabs.bar)
+    else:
+        assert y_of(window, window.tab_row_widget) < y_of(window, window.toolbar_widget)
     assert y_of(window, window.toolbar_widget) < y_of(window, view)
     assert not window.findChildren(QTabWidget)
 
@@ -185,17 +188,20 @@ def test_tab_sleep_marks_and_wakes_tabs(window):
     assert not window.tabs.tabText(window.tabs.indexOf(first)).startswith("💤")
 
 
-def test_tab_sleep_spares_current_tab_and_is_off_by_default(window):
+def test_memory_saver_spares_current_tab_and_can_sleep_background_tabs(window):
     first = window.current_view()
     first._nexlori_start = False
     window._tab_activity[first] = 0.0
-    window._sleep_tick()                         # Add-on ist standardmäßig aus
+    window.settings.memory_saver = True
+    window._sleep_tick()                         # der aktive Tab bleibt trotz Speichersparmodus wach
     assert first.page().lifecycleState() == QWebEnginePage.LifecycleState.Active
-    window.settings.builtin_addons["tab-sleep"] = True
-    window.settings.tab_sleep_minutes = 2
+    second = window.new_tab(start_page=False, url="about:blank")
+    pump()
     window._tab_activity[first] = 0.0
-    window._sleep_tick()                         # aktueller Tab bleibt wach
-    assert first.page().lifecycleState() == QWebEnginePage.LifecycleState.Active
+    window._tab_activity[second] = __import__("time").monotonic()
+    window._sleep_tick()                         # der alte Hintergrund-Tab wird entladen
+    assert first.page().lifecycleState() == QWebEnginePage.LifecycleState.Discarded
+    assert second.page().lifecycleState() == QWebEnginePage.LifecycleState.Active
 
 
 def test_theme_shop_dialog_install_apply_remove(window, tmp_path, monkeypatch):

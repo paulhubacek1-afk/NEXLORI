@@ -104,3 +104,10 @@ def test_old_settings_files_get_new_defaults():
     assert loaded.builtin_addons["clean-urls"] is True and "unbekannt" not in loaded.builtin_addons
     assert Settings.from_dict({"theme": "hell"}).animations == "full"
     assert Settings.from_dict({"theme": "hell"}).custom_titlebar is True
+
+
+def test_memory_saver_is_enabled_by_default_and_can_be_disabled():
+    assert Settings().memory_saver is True
+    settings = Settings(memory_saver=False)
+    assert settings.problems() == []
+    assert Settings.from_dict({"theme": "dunkel"}).memory_saver is True

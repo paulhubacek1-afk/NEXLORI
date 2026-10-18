@@ -59,7 +59,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from . import __version__
 from .browser import normalize_input
-from .core.settings import Settings, default_settings_path
+from .core.settings import Settings, canonical_search_url, default_settings_path
 from .animations import AccentLine, Motion, animate_progress, cascade_in, crossfade
 from .core.builtin_addons import ADDONS, build_addons_script, is_enabled, reader_script
 from .core.privacy import strip_tracking_params, tabs_to_sleep, upgrade_to_https
@@ -84,6 +84,12 @@ from .page_theme import build_page_theme_script
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
+SEARCH_PROVIDERS = {
+    "DuckDuckGo": "https://duckduckgo.com/?q={}",
+    "Google": "https://www.google.com/search?q={}",
+    "Bing": "https://www.bing.com/search?q={}",
+    "Ecosia": "https://www.ecosia.org/search?q={}",
+}
 
 
 def _qt_app_icon(theme: Theme | None = None) -> QIcon:
@@ -161,6 +167,9 @@ button:hover {{ transform:translateY(-1px); filter:brightness(1.08); }} button:a
 a.tile {{ text-decoration:none; color:{theme.fg}; display:block; border:1px solid {theme.surface}; border-radius:17px; padding:19px; background:{theme.surface}; transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease; animation:tile-enter .55s ease both; }}
 a.tile:nth-child(2) {{ animation-delay:.05s; }} a.tile:nth-child(3) {{ animation-delay:.10s; }} a.tile:nth-child(4) {{ animation-delay:.15s; }} a.tile:nth-child(5) {{ animation-delay:.20s; }} a.tile:nth-child(6) {{ animation-delay:.25s; }}
 a.tile:hover {{ border-color:{theme.accent}; transform:translateY(-4px); box-shadow:0 12px 30px {theme.accent}18; }}
+a.tile:focus-visible, a.cta:focus-visible, button:focus-visible {{ outline:2px solid {theme.accent}; outline-offset:3px; }}
+.tile-icon {{ transition:transform .24s ease,color .24s ease; }}
+a.tile:hover .tile-icon {{ transform:translateY(-2px) rotate(-5deg) scale(1.1); }}
 .community {{ margin:20px 0 22px; display:flex; justify-content:center; }}
 a.cta {{ display:inline-flex; align-items:center; gap:10px; text-decoration:none; font-weight:600; color:{theme.bg}; background:{theme.accent}; padding:12px 24px; border-radius:999px; transition:transform .2s ease,box-shadow .2s ease; }}
 a.cta:hover {{ transform:translateY(-2px); box-shadow:0 10px 26px {theme.accent}55; }}
@@ -355,6 +364,7 @@ class NexloriWindow(QMainWindow):
     ):
         super().__init__()
         self.settings = settings
+        self.settings.search_url = canonical_search_url(settings.search_url)
         self.settings_path = settings_path
         self.custom_titlebar = bool(settings.custom_titlebar)
         if self.custom_titlebar:
@@ -392,6 +402,7 @@ class NexloriWindow(QMainWindow):
             QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies
         )
         self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
+        self.profile.setHttpCacheMaximumSize(96 * 1024 * 1024)
         self.profile.downloadRequested.connect(self._download_requested)
         self._page_theme_script = None
         self._refresh_page_theme_script()
@@ -414,9 +425,10 @@ class NexloriWindow(QMainWindow):
         view = self.new_tab(start_page=start_url is None, activate=True)
         if start_url:
             self.navigate_view(view, start_url)
-        QTimer.singleShot(1200, self._ensure_default_extension)
+        # Netzwerk-/Erweiterungsarbeit verzögert starten, damit das Browserfenster zuerst bedienbar ist.
+        QTimer.singleShot(3200, self._ensure_default_extension)
         if self.settings.auto_update_check:
-            QTimer.singleShot(2500, self._start_silent_update_check)
+            QTimer.singleShot(10000, self._start_silent_update_check)
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -428,7 +440,6 @@ class NexloriWindow(QMainWindow):
         if self.custom_titlebar:
             self.title_bar = TitleBar(self)
             self.title_bar.set_icon(self.windowIcon())
-            self.windowTitleChanged.connect(self.title_bar.set_title)
             outer.addWidget(self.title_bar)
 
         self.accent_line = AccentLine(root, 4)
@@ -453,7 +464,12 @@ class NexloriWindow(QMainWindow):
         tab_row.addWidget(self.tabs.bar, 1)
         self.tab_row_widget = QWidget(root)
         self.tab_row_widget.setLayout(tab_row)
-        outer.addWidget(self.tab_row_widget)
+        if self.title_bar is not None:
+            tab_row.removeWidget(self.new_tab_button)
+            tab_row.removeWidget(self.tabs.bar)
+            self.title_bar.set_tab_widgets(self.new_tab_button, self.tabs.bar)
+        else:
+            outer.addWidget(self.tab_row_widget)
 
         self.tab_row_widget.setObjectName("tabRow")
         toolbar = QWidget(root)
@@ -626,14 +642,14 @@ class NexloriWindow(QMainWindow):
         self.theme_actions.setdefault(name, action)
 
     def edit_theme_mix(self) -> None:
-        """Let the user combine the base theme with up to three additional palettes."""
+        """Let the user combine the base theme with up to seven additional palettes."""
         dialog = QDialog(self)
         dialog.setWindowTitle('Themes kombinieren')
         dialog.resize(500, 600)
         layout = QVBoxLayout(dialog)
         note = QLabel(
             'Das aktive Theme bleibt die Basis für Hintergrund und Text. '
-            'Wähle bis zu drei weitere Themes dazu. Alle gewählten Themes erscheinen '
+            'Wähle bis zu sieben weitere Themes dazu. Alle gewählten Themes erscheinen '
             'gemeinsam im Farbstreifen; das Basis-Theme sorgt weiter für gut lesbaren Text.',
             dialog,
         )
@@ -651,16 +667,16 @@ class NexloriWindow(QMainWindow):
 
         def update_count() -> None:
             selected_count = sum(1 for checkbox in checks.values() if checkbox.isChecked())
-            count.setText(f"{selected_count}/4 Themes ausgewählt")
+            count.setText(f"{selected_count}/8 Themes ausgewählt")
 
         def changed(checked: bool, own_name: str) -> None:
-            if checked and sum(1 for checkbox in checks.values() if checkbox.isChecked()) > 4:
+            if checked and sum(1 for checkbox in checks.values() if checkbox.isChecked()) > 8:
                 checks[own_name].blockSignals(True)
                 checks[own_name].setChecked(False)
                 checks[own_name].blockSignals(False)
                 QMessageBox.information(
-                    dialog, 'Maximal vier Themes',
-                    'Du kannst die Basis mit höchstens drei weiteren Themes kombinieren.',
+                    dialog, 'Maximal acht Themes',
+                    'Du kannst die Basis mit höchstens sieben weiteren Themes kombinieren.',
                 )
             update_count()
 
@@ -795,13 +811,7 @@ class NexloriWindow(QMainWindow):
         form.addRow("Icon-Größe", icon_size)
 
         search_engine = QComboBox(dialog)
-        providers = {
-            "DuckDuckGo": "https://duckduckgo.com/?q={}",
-            "Google": "https://www.google.com/search?q={}",
-            "Bing": "https://www.bing.com/search?q={}",
-            "Ecosia": "https://www.ecosia.org/search?q={}",
-        }
-        for label, url in providers.items():
+        for label, url in SEARCH_PROVIDERS.items():
             search_engine.addItem(label, url)
         selected = search_engine.findData(self.settings.search_url)
         if selected < 0 and "duckduckgo" in self.settings.search_url.lower():
@@ -847,6 +857,7 @@ class NexloriWindow(QMainWindow):
         self.settings.toolbar_visible_icons = [
             name for name, check in checks.items() if check.isChecked()
         ]
+        self._refresh_open_start_pages()
         self._save_settings()
         self._apply_toolbar_preferences()
         self.statusBar().showMessage("Deine Browserleiste wurde angepasst.", 3000)
@@ -871,6 +882,7 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Nexlori-Add-ons …", self.show_addons_center)
         self.tools_menu = self.more_menu.addMenu("Werkzeuge")
         self.more_menu.addAction("Theme-Shop …", self.show_theme_shop)
+        self.more_menu.addAction("Als Standardbrowser festlegen …", self.set_as_default_browser)
         self.more_menu.addAction("Einstellungen", self.show_settings, QKeySequence("Ctrl+,"))
         self.more_menu.addAction("Browserleiste anpassen …", self.customize_toolbar)
         self.more_menu.addSeparator()
@@ -934,14 +946,15 @@ QMainWindow, QWidget {{ background:{theme.bg}; color:{theme.fg}; }}
 QWidget#toolbar {{ background:{theme.bg}; }}
 QWidget#tabRow {{ background:{theme.surface}; }}
 QWidget#titleBar {{ background:{theme.surface}; }}
+QWidget#titleTabsHost {{ background:{theme.surface}; }}
 QLabel#titleText {{ color:{theme.fg}; background:transparent; font-size:12px; }}
 QToolButton#titleButton, QToolButton#titleCloseButton {{ background:transparent; color:{theme.fg}; border:0; border-radius:0;
- min-width:46px; max-width:46px; min-height:38px; max-height:38px; padding:0; font-size:13px; }}
+ min-width:46px; max-width:46px; min-height:42px; max-height:42px; padding:0; font-size:13px; }}
 QToolButton#titleButton:hover {{ background:{theme.bg}; color:{theme.accent}; }}
 QToolButton#titleCloseButton:hover {{ background:#E81123; color:#FFFFFF; }}
 QTabBar {{ background:{theme.surface}; }}
 QTabBar::tab {{ background:{theme.surface}; color:{theme.fg}; border:1px solid transparent;
- border-top-left-radius:10px; border-top-right-radius:10px; padding:10px 13px; margin-right:3px; min-width:90px; }}
+ border-top-left-radius:9px; border-top-right-radius:9px; padding:5px 9px; margin-right:2px; min-width:68px; max-height:30px; }}
 QTabBar::tab:selected {{ background:{theme.bg}; border-color:{theme.surface}; border-bottom:2px solid {theme.accent}; }}
 QTabBar::tab:hover {{ background:{theme.bg}; }}
 QToolButton {{ color:{theme.fg}; background:transparent; border:0; border-radius:12px; min-width:{icon_px + 16}px; min-height:{icon_px + 16}px; padding:3px; font-size:{icon_px}px; }}
@@ -1282,6 +1295,17 @@ QPushButton:disabled {{ color:{muted}; }}
         view = self.current_view()
         if view is not None:
             self.navigate_view(view, target)
+
+    def _refresh_open_start_pages(self) -> None:
+        """Refresh already-open internal start pages after search-provider changes."""
+        for index in range(self.tabs.count()):
+            view = self.tabs.widget(index)
+            if (
+                isinstance(view, QWebEngineView)
+                and getattr(view, "_nexlori_start", False)
+                and view.url().toString() == "about:blank"
+            ):
+                view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
 
     def navigate_view(self, view: QWebEngineView, url: str) -> None:
         if url.lower() in {"about:start", "nexlori:start"}:
@@ -1665,13 +1689,10 @@ QPushButton:disabled {{ color:{muted}; }}
         zoom.setSuffix("×")
         zoom.setValue(float(self.settings.page_zoom))
 
+        memory_saver = QCheckBox("Inaktive Tabs automatisch entladen (spart RAM)", dialog)
+        memory_saver.setChecked(self.settings.memory_saver)
         search_engine = QComboBox(dialog)
-        providers = {
-            "DuckDuckGo": "https://html.duckduckgo.com/html/?q={}",
-            "Google": "https://www.google.com/search?q={}",
-            "Bing": "https://www.bing.com/search?q={}",
-            "Ecosia": "https://www.ecosia.org/search?q={}",
-        }
+        providers = SEARCH_PROVIDERS
         for label, template in providers.items():
             search_engine.addItem(label, template)
         selected = search_engine.findData(self.settings.search_url)
@@ -1693,6 +1714,7 @@ QPushButton:disabled {{ color:{muted}; }}
         titlebar = QCheckBox("Eigene Titelleiste in Theme-Farben (Neustart nötig)", dialog)
         titlebar.setChecked(self.settings.custom_titlebar)
         form.addRow("Animationen", animations)
+        form.addRow("Speicher", memory_saver)
         form.addRow("Fenster", titlebar)
         form.addRow("Website-Farben", theme_css)
         form.addRow("Werbe- und Trackerschutz", ubol)
@@ -1709,9 +1731,12 @@ QPushButton:disabled {{ color:{muted}; }}
         shop.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.show_theme_shop)))
         toolbar = QPushButton("Browserleiste anpassen …", dialog)
         toolbar.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.customize_toolbar)))
+        default_browser = QPushButton("Standardbrowser …", dialog)
+        default_browser.clicked.connect(lambda: (dialog.accept(), QTimer.singleShot(0, self.set_as_default_browser)))
         actions.addWidget(addons)
         actions.addWidget(shop)
         actions.addWidget(toolbar)
+        actions.addWidget(default_browser)
         root.addLayout(actions)
 
         buttons = QDialogButtonBox(
@@ -1727,9 +1752,10 @@ QPushButton:disabled {{ color:{muted}; }}
         self.settings.adapt_page_theme = theme_css.isChecked()
         self.settings.ubol_enabled = ubol.isChecked()
         self.settings.auto_update_check = updates.isChecked()
+        self.settings.memory_saver = memory_saver.isChecked()
         self.settings.allow_web_popups = popups.isChecked()
         self.settings.page_zoom = float(zoom.value())
-        self.settings.search_url = str(search_engine.currentData())
+        self.settings.search_url = canonical_search_url(str(search_engine.currentData()))
         self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
         self.settings.animations = str(animations.currentData())
         self.motion = Motion(self.settings.animations)
@@ -1738,6 +1764,7 @@ QPushButton:disabled {{ color:{muted}; }}
         self.settings.custom_titlebar = titlebar.isChecked()
         self._refresh_page_theme_script()
         self._sync_extension_states()
+        self._refresh_open_start_pages()
         self._save_settings()
         for index in range(self.tabs.count()):
             view = self.tabs.widget(index)
@@ -2090,7 +2117,7 @@ QPushButton:disabled {{ color:{muted}; }}
         current = self.current_view()
         if current is not None:
             self._tab_activity[current] = now
-        if not is_enabled(self.settings.builtin_addons, "tab-sleep") or self._closing:
+        if not (self.settings.memory_saver or is_enabled(self.settings.builtin_addons, "tab-sleep")) or self._closing:
             return
         skip = {
             view for view in self._tab_activity
@@ -2182,7 +2209,7 @@ QPushButton:disabled {{ color:{muted}; }}
         if self._first_show:
             self._first_show = False
             self.accent_line.set_flow(self.motion.continuous)
-            cascade_in([self.title_bar, self.tab_row_widget, self.toolbar_widget], self.motion)
+            cascade_in([self.title_bar, self.tabs.bar if self.title_bar is not None else self.tab_row_widget, self.toolbar_widget], self.motion)
         if not self.custom_titlebar:
             apply_native_titlebar_colors(self, self.theme)
 
