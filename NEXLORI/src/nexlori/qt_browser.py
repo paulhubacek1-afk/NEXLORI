@@ -2305,7 +2305,20 @@ def _selftest_webengine() -> tuple[bool, str]:
     return True, str(result["title"])
 
 
+def _write_smoke_progress(stage: str) -> None:
+    """Write GUI-startup checkpoints for the Windows packaging smoke test only."""
+    progress_path = os.environ.get("NEXLORI_SMOKE_PROGRESS")
+    if not progress_path:
+        return
+    try:
+        with Path(progress_path).open("a", encoding="utf-8") as handle:
+            handle.write(stage + "\\n")
+    except OSError:
+        pass
+
+
 def run(argv: list[str] | None = None) -> int:
+    _write_smoke_progress("entrypoint")
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["--webengine-selftest"]:
         try:
@@ -2316,25 +2329,33 @@ def run(argv: list[str] | None = None) -> int:
             print(f"FEHLER WebEngine: {type(exc).__name__}: {exc}")
             return 5
 
+    _write_smoke_progress("before-settings")
     settings_path = default_settings_path()
     # Installierte Shop-Themes müssen bekannt sein, bevor die Einstellungen geprüft werden.
     ThemeStore(default_theme_dir(settings_path)).load_into_registry()
+    _write_smoke_progress("themes-loaded")
     try:
         settings = Settings.load_lenient(settings_path)
     except (ValueError, OSError):
         settings = Settings()
 
+    _write_smoke_progress("before-qapplication")
     app = QApplication.instance() or QApplication([APP_NAME])
+    _write_smoke_progress("qapplication-created")
     app.setApplicationName(APP_NAME)
     app.setOrganizationName("Nexlori")
     app.setWindowIcon(_qt_app_icon())
     app.setStyle("Fusion")
+    _write_smoke_progress("application-configured")
     start_url = None
     if argv:
         start_url = normalize_input(" ".join(arg for arg in argv if not arg.startswith("-")), settings.search_url)
+    _write_smoke_progress("before-window-constructor")
     window = NexloriWindow(settings, settings_path, start_url)
+    _write_smoke_progress("window-constructed")
     app.installEventFilter(DialogThemer(lambda: window.theme, app))
     window.show()
+    _write_smoke_progress("window-shown")
     # CI runners may not expose a native interactive desktop/window handle.
     # A marker lets the Windows smoke test verify that construction reached show().
     smoke_marker = os.environ.get("NEXLORI_SMOKE_MARKER")

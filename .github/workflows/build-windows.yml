@@ -123,8 +123,10 @@ jobs:
           $marker = Join-Path $PWD "gui-smoke-test.marker.txt"
           $stdout = Join-Path $PWD "gui-smoke-test.stdout.txt"
           $stderr = Join-Path $PWD "gui-smoke-test.stderr.txt"
-          Remove-Item $marker, $stdout, $stderr -Force -ErrorAction SilentlyContinue
+          $progress = Join-Path $PWD "gui-smoke-test.progress.txt"
+          Remove-Item $marker, $stdout, $stderr, $progress -Force -ErrorAction SilentlyContinue
           $env:NEXLORI_SMOKE_MARKER = $marker
+          $env:NEXLORI_SMOKE_PROGRESS = $progress
           $process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           $deadline = (Get-Date).AddSeconds(35)
           while ((Get-Date) -lt $deadline -and -not (Test-Path $marker)) {
@@ -138,9 +140,12 @@ jobs:
             }
           }
           Remove-Item Env:NEXLORI_SMOKE_MARKER -ErrorAction SilentlyContinue
+          Remove-Item Env:NEXLORI_SMOKE_PROGRESS -ErrorAction SilentlyContinue
           if (-not (Test-Path $marker)) {
+            $progressDetails = if (Test-Path $progress) { Get-Content $progress -Raw } else { "kein Start-Checkpoint geschrieben" }
+            $stderrDetails = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "keine stderr-Ausgabe" }
             & taskkill.exe /PID $process.Id /T /F | Out-Null
-            throw "Nexlori hat das GUI-Initialisieren nicht innerhalb von 35 Sekunden bestätigt."
+            throw "Nexlori hat das GUI-Initialisieren nicht innerhalb von 35 Sekunden bestätigt. Letzter Start-Checkpoint: $progressDetails. stderr: $stderrDetails"
           }
           $details = Get-Content $marker -Raw
           Write-Host "GUI-Initialisierung erfolgreich: $details"
