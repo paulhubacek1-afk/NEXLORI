@@ -1,0 +1,96 @@
+{
+  "format": 1,
+  "name": "neon-night",
+  "label": "Neon Night",
+  "description": "Neonfarben, Sci-Fi-Kontraste und leuchtende Akzente.",
+  "themes": [
+    {
+      "name": "neon-tokyo",
+      "label": "Neon Tokyo",
+      "category": "Neon",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Leuchtreklame im Regen.",
+      "bg": "#0B0B14",
+      "surface": "#171726",
+      "fg": "#F2F2FF",
+      "accent": "#00F0FF",
+      "stripes": [
+        "#FF2079",
+        "#9D4EDD",
+        "#00F0FF"
+      ]
+    },
+    {
+      "name": "synthwave",
+      "label": "Synthwave",
+      "category": "Neon",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "80er-Retrowave in Pink und Cyan.",
+      "bg": "#241B2F",
+      "surface": "#34294F",
+      "fg": "#F4EEFF",
+      "accent": "#FF7EDB",
+      "stripes": [
+        "#FF7EDB",
+        "#B893CE",
+        "#36F9F6",
+        "#FEDE5D"
+      ]
+    },
+    {
+      "name": "vaporwave",
+      "label": "Vaporwave",
+      "category": "Neon",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Pastellneon, glitzernd und verträumt.",
+      "bg": "#1B1030",
+      "surface": "#2B1B4D",
+      "fg": "#F5EBFF",
+      "accent": "#FF71CE",
+      "stripes": [
+        "#FF71CE",
+        "#B967FF",
+        "#01CDFE",
+        "#05FFA1",
+        "#FFFB96"
+      ]
+    },
+    {
+      "name": "matrix",
+      "label": "Matrix",
+      "category": "Neon",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Grüner Code-Regen.",
+      "bg": "#020B05",
+      "surface": "#0B1F12",
+      "fg": "#D6FFE0",
+      "accent": "#00FF66",
+      "stripes": [
+        "#003B1A",
+        "#00A844",
+        "#00FF66"
+      ]
+    },
+    {
+      "name": "cyber-lime",
+      "label": "Cyber Limette",
+      "category": "Neon",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Grelles Limettengrün auf Schwarz.",
+      "bg": "#0C0F08",
+      "surface": "#1A2110",
+      "fg": "#F1FFD6",
+      "accent": "#C6FF00",
+      "stripes": [
+        "#6B8E00",
+        "#C6FF00",
+        "#F4FF81"
+      ]
+    }
+  ]
+}

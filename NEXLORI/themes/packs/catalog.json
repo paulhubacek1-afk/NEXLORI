@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "packs": [
+    {
+      "name": "neon-night",
+      "label": "Neon Night",
+      "description": "Neonfarben, Sci-Fi-Kontraste und leuchtende Akzente.",
+      "url": "https://raw.githubusercontent.com/paulhubacek1-afk/NEXLORI/main/NEXLORI/themes/packs/neon-night.nxthemepack"
+    },
+    {
+      "name": "soft-pastel",
+      "label": "Soft Pastel",
+      "description": "Helle, sanfte Pastellfarben für einen ruhigen Browser-Look.",
+      "url": "https://raw.githubusercontent.com/paulhubacek1-afk/NEXLORI/main/NEXLORI/themes/packs/soft-pastel.nxthemepack"
+    },
+    {
+      "name": "gemstones",
+      "label": "Gemstones",
+      "description": "Kräftige Edelsteinfarben von Amethyst bis Saphir.",
+      "url": "https://raw.githubusercontent.com/paulhubacek1-afk/NEXLORI/main/NEXLORI/themes/packs/gemstones.nxthemepack"
+    }
+  ]
+}

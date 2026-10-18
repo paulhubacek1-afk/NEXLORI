@@ -1,0 +1,93 @@
+{
+  "format": 1,
+  "name": "soft-pastel",
+  "label": "Soft Pastel",
+  "description": "Helle, sanfte Pastellfarben für einen ruhigen Browser-Look.",
+  "themes": [
+    {
+      "name": "paper",
+      "label": "Papier",
+      "category": "Hell",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Cremeweiß wie gutes Schreibpapier.",
+      "bg": "#FBF8F1",
+      "surface": "#EFE9DA",
+      "fg": "#2A2723",
+      "accent": "#8A4B14",
+      "stripes": [
+        "#8A4B14",
+        "#C98A3B",
+        "#E7C27D"
+      ]
+    },
+    {
+      "name": "sky",
+      "label": "Himmel",
+      "category": "Hell",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Klares Himmelblau.",
+      "bg": "#F3F9FF",
+      "surface": "#E1EEFA",
+      "fg": "#0F2236",
+      "accent": "#1D6FD1",
+      "stripes": [
+        "#1D6FD1",
+        "#4DA3FF",
+        "#A5D2FF"
+      ]
+    },
+    {
+      "name": "mint-light",
+      "label": "Minze Hell",
+      "category": "Hell",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Frisch und leicht.",
+      "bg": "#F2FBF6",
+      "surface": "#DFF2E8",
+      "fg": "#10281B",
+      "accent": "#1F7A4D",
+      "stripes": [
+        "#1F7A4D",
+        "#4CBF86",
+        "#A8E6C5"
+      ]
+    },
+    {
+      "name": "blossom",
+      "label": "Blüte",
+      "category": "Hell",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Zartes Rosa.",
+      "bg": "#FFF5F8",
+      "surface": "#FBE3EC",
+      "fg": "#3A1626",
+      "accent": "#B8326B",
+      "stripes": [
+        "#B8326B",
+        "#F06EA0",
+        "#FFB6D0"
+      ]
+    },
+    {
+      "name": "lilac",
+      "label": "Flieder",
+      "category": "Hell",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Sanftes Violett.",
+      "bg": "#F8F4FF",
+      "surface": "#E9E0FA",
+      "fg": "#2A1B45",
+      "accent": "#6B3FD0",
+      "stripes": [
+        "#6B3FD0",
+        "#A07CF0",
+        "#D2BFFF"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "format": 1,
+  "name": "gemstones",
+  "label": "Gemstones",
+  "description": "Kräftige Edelsteinfarben von Amethyst bis Saphir.",
+  "themes": [
+    {
+      "name": "amethyst",
+      "label": "Amethyst",
+      "category": "Edelstein",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Violetter Kristall.",
+      "bg": "#170F24",
+      "surface": "#271A3F",
+      "fg": "#F4ECFF",
+      "accent": "#D19BFF",
+      "stripes": [
+        "#5E2A8C",
+        "#A55EEA",
+        "#D19BFF"
+      ]
+    },
+    {
+      "name": "emerald",
+      "label": "Smaragd",
+      "category": "Edelstein",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Tiefgrün mit Glanz.",
+      "bg": "#06180F",
+      "surface": "#0F2E1E",
+      "fg": "#E6FFF1",
+      "accent": "#34D399",
+      "stripes": [
+        "#065F46",
+        "#10B981",
+        "#34D399"
+      ]
+    },
+    {
+      "name": "ruby",
+      "label": "Rubin",
+      "category": "Edelstein",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Leuchtendes Rot.",
+      "bg": "#1C0B10",
+      "surface": "#331520",
+      "fg": "#FFEAEF",
+      "accent": "#FF6B8A",
+      "stripes": [
+        "#7F1D3A",
+        "#E11D48",
+        "#FF6B8A"
+      ]
+    },
+    {
+      "name": "sapphire",
+      "label": "Saphir",
+      "category": "Edelstein",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Königsblau.",
+      "bg": "#08142A",
+      "surface": "#11264D",
+      "fg": "#EAF2FF",
+      "accent": "#6AA7FF",
+      "stripes": [
+        "#1E3A8A",
+        "#3B82F6",
+        "#6AA7FF"
+      ]
+    },
+    {
+      "name": "obsidian",
+      "label": "Obsidian",
+      "category": "Dunkel",
+      "author": "Nexlori",
+      "rev": 1,
+      "description": "Tiefschwarz mit goldenem Akzent.",
+      "bg": "#0D0D0F",
+      "surface": "#1A1A1F",
+      "fg": "#EDEDF2",
+      "accent": "#C9A227",
+      "stripes": [
+        "#3A2F0B",
+        "#C9A227",
+        "#F2D675"
+      ]
+    }
+  ]
+}

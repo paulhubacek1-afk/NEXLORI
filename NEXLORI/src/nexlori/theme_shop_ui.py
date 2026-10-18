@@ -1,6 +1,9 @@
 """Theme-Shop-Oberfläche: Themes ansehen, installieren, anwenden und wieder entfernen."""
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from PySide6.QtCore import QRect, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -12,12 +15,17 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QInputDialog,
+    QFileDialog,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from .core.theme_shop import ShopError, ShopTheme, ThemeStore, fetch_catalog
+from .core.theme_packs import (
+    ThemePack, ThemePackInfo, fetch_pack_catalog, fetch_theme_pack, parse_theme_pack, serialize_theme_pack,
+)
 from .core.themes import Theme
 
 
@@ -123,6 +131,40 @@ class CatalogWorker(QThread):
             self.loaded.emit(themes, skipped)
 
 
+class PackCatalogWorker(QThread):
+    """Fetch a list of downloadable data-only theme packs without blocking the UI."""
+
+    loaded = Signal(object, int)
+    failed = Signal(str)
+
+    def run(self) -> None:
+        try:
+            packs, skipped = fetch_pack_catalog()
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+        else:
+            self.loaded.emit(packs, skipped)
+
+
+class PackDownloadWorker(QThread):
+    """Download and validate one theme pack away from the UI thread."""
+
+    loaded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, info: ThemePackInfo, parent=None):
+        super().__init__(parent)
+        self.info = info
+
+    def run(self) -> None:
+        try:
+            pack = fetch_theme_pack(self.info)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+        else:
+            self.loaded.emit(pack)
+
+
 class ThemeShopDialog(QDialog):
     def __init__(self, owner, parent=None):
         super().__init__(parent or owner)
@@ -130,6 +172,7 @@ class ThemeShopDialog(QDialog):
         self.store: ThemeStore = owner.theme_store
         self.items: dict[str, ShopTheme] = {}
         self._worker: CatalogWorker | None = None
+        self._pack_worker: QThread | None = None
         self.setWindowTitle("Nexlori · Theme-Shop")
         self.resize(860, 560)
 
@@ -160,6 +203,18 @@ class ThemeShopDialog(QDialog):
         filters.addWidget(self.only_installed)
         filters.addWidget(self.refresh_button)
         root.addLayout(filters)
+
+        pack_actions = QHBoxLayout()
+        self.download_pack_button = QPushButton("Theme-Pack herunterladen …", self)
+        self.download_pack_button.clicked.connect(self.download_pack)
+        self.import_pack_button = QPushButton("Pack importieren …", self)
+        self.import_pack_button.clicked.connect(self.import_pack)
+        self.export_pack_button = QPushButton("Installierte Themes als Pack exportieren …", self)
+        self.export_pack_button.clicked.connect(self.export_pack)
+        pack_actions.addWidget(self.download_pack_button)
+        pack_actions.addWidget(self.import_pack_button)
+        pack_actions.addWidget(self.export_pack_button)
+        root.addLayout(pack_actions)
 
         body = QHBoxLayout()
         self.list = QListWidget(self)
@@ -203,6 +258,110 @@ class ThemeShopDialog(QDialog):
 
         self._rebuild_items()
         self.load_catalog()
+
+    # ------------------------------------------------------------- Theme-Packs
+    def download_pack(self) -> None:
+        if self._pack_worker is not None and self._pack_worker.isRunning():
+            return
+        self.download_pack_button.setEnabled(False)
+        self.status.setText("Theme-Pack-Katalog wird geladen …")
+        worker = PackCatalogWorker(self.owner)
+        worker.loaded.connect(self._pack_catalog_loaded)
+        worker.failed.connect(self._pack_failed)
+        worker.finished.connect(worker.deleteLater)
+        self._pack_worker = worker
+        worker.start()
+
+    def _pack_catalog_loaded(self, packs: list, skipped: int) -> None:
+        self._pack_worker = None
+        self.download_pack_button.setEnabled(True)
+        if not packs:
+            self.status.setText("Es sind derzeit keine gültigen Theme-Packs verfügbar.")
+            return
+        choices = [f"{pack.label} ({pack.name})" for pack in packs]
+        chosen, accepted = QInputDialog.getItem(self, "Theme-Pack herunterladen", "Wähle ein Pack:", choices, 0, False)
+        if not accepted or not chosen:
+            self.status.setText("Theme-Pack-Auswahl abgebrochen.")
+            return
+        info = packs[choices.index(chosen)]
+        worker = PackDownloadWorker(info, self.owner)
+        worker.loaded.connect(self._pack_downloaded)
+        worker.failed.connect(self._pack_failed)
+        worker.finished.connect(worker.deleteLater)
+        self._pack_worker = worker
+        self.download_pack_button.setEnabled(False)
+        self.status.setText(f"„{info.label}“ wird heruntergeladen und geprüft …")
+        worker.start()
+
+    def _pack_downloaded(self, pack: ThemePack) -> None:
+        self._pack_worker = None
+        self.download_pack_button.setEnabled(True)
+        installed = 0
+        try:
+            for item in pack.themes:
+                self.store.install(item)
+                installed += 1
+        except (ShopError, OSError) as exc:
+            self.owner.rebuild_theme_menu()
+            self._rebuild_items()
+            self.status.setText(f"Pack teilweise installiert ({installed} Themes). Fehler: {exc}")
+            return
+        self.owner.rebuild_theme_menu()
+        self._rebuild_items()
+        self.status.setText(f"Theme-Pack „{pack.label}“ installiert: {installed} Themes. Du kannst sie jetzt kombinieren.")
+
+    def _pack_failed(self, message: str) -> None:
+        self._pack_worker = None
+        self.download_pack_button.setEnabled(True)
+        self.status.setText("Theme-Pack konnte nicht geladen werden: " + message)
+
+    def import_pack(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Nexlori Theme-Pack importieren", "", "Nexlori Theme-Packs (*.nxthemepack)"
+        )
+        if not filename:
+            return
+        try:
+            raw = Path(filename).read_bytes()
+            pack = parse_theme_pack(raw)
+            for item in pack.themes:
+                self.store.install(item)
+        except (OSError, ShopError, ValueError) as exc:
+            QMessageBox.warning(self, "Theme-Pack importieren", f"Das Pack konnte nicht importiert werden: {exc}")
+            return
+        self.owner.rebuild_theme_menu()
+        self._rebuild_items()
+        self.status.setText(f"Pack „{pack.label}“ importiert: {len(pack.themes)} Themes installiert.")
+
+    def export_pack(self) -> None:
+        installed = self.store.installed()
+        if not installed:
+            QMessageBox.information(self, "Theme-Pack exportieren", "Installiere zuerst Themes aus dem Theme-Shop.")
+            return
+        label, accepted = QInputDialog.getText(
+            self, "Theme-Pack exportieren", "Name des Theme-Packs:", text="Meine Nexlori-Themes"
+        )
+        if not accepted or not label.strip():
+            return
+        slug = re.sub(r"[^a-z0-9-]+", "-", label.strip().lower()).strip("-")[:40] or "mein-theme-pack"
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Theme-Pack speichern", f"{slug}.nxthemepack", "Nexlori Theme-Packs (*.nxthemepack)"
+        )
+        if not filename:
+            return
+        if not filename.lower().endswith(".nxthemepack"):
+            filename += ".nxthemepack"
+        themes = [ShopTheme(theme=theme, category="Export", author="Nexlori", rev=revision)
+                  for theme, revision in installed.values()]
+        try:
+            Path(filename).write_text(
+                serialize_theme_pack(slug, label.strip(), "Aus Nexlori exportierte Theme-Sammlung.", themes),
+                encoding="utf-8",
+            )
+        except (OSError, ValueError, ShopError) as exc:
+            QMessageBox.warning(self, "Theme-Pack exportieren", f"Das Pack konnte nicht gespeichert werden: {exc}")
+            return
+        self.status.setText(f"Theme-Pack gespeichert: {Path(filename).name} ({len(themes)} Themes).")
 
     # ------------------------------------------------------------------ Daten
     def load_catalog(self) -> None:
