@@ -1780,6 +1780,30 @@ QPushButton:disabled {{ color:{muted}; }}
                 "Die Änderung der Titelleiste wird nach dem nächsten Start von Nexlori wirksam.",
             )
 
+    def set_as_default_browser(self) -> None:
+        """Register Nexlori with Windows and open the system-controlled default-app chooser."""
+        if os.name != "nt":
+            QMessageBox.information(self, "Standardbrowser", "Diese Funktion wird derzeit nur unter Windows unterstützt.")
+            return
+        executable = sys.executable if getattr(sys, "frozen", False) else None
+        try:
+            from .default_browser import default_browser_settings_uri, register_windows_browser
+            if not register_windows_browser(executable):
+                QMessageBox.information(
+                    self, "Standardbrowser",
+                    "Bitte starte die installierte Nexlori-Windows-Version. Danach kannst du Nexlori hier als "
+                    "Standardbrowser auswählen.",
+                )
+                return
+            QDesktopServices.openUrl(QUrl(default_browser_settings_uri()))
+            QMessageBox.information(
+                self, "Standardbrowser",
+                "Die Windows-Einstellungen wurden geöffnet. Wähle dort Nexlori für HTTP- und HTTPS-Links aus "
+                "und bestätige die Auswahl. Windows muss die Änderung selbst bestätigen.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Standardbrowser", f"Nexlori konnte nicht registriert werden: {exc}")
+
     def show_spotify_popup(self) -> None:
         try:
             from .spotify_popup import SpotifyPopup
