@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QToolButton, QVBoxLa
 
 from .core.themes import Theme, hex_to_rgb, relative_luminance
 
-TITLEBAR_HEIGHT = 38
+TITLEBAR_HEIGHT = 42
 RESIZE_MARGIN = 5
 
 
@@ -88,14 +88,30 @@ class TitleBar(QWidget):
 
         self.title_label = QLabel("Nexlori", self)
         self.title_label.setObjectName("titleText")
+        self.title_label.setFixedWidth(82)
         self.title_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        row.addWidget(self.title_label, 1)
+        row.addWidget(self.title_label)
+
+        self.tabs_host = QWidget(self)
+        self.tabs_host.setObjectName("titleTabsHost")
+        self.tabs_host.setMinimumWidth(0)
+        self.tabs_layout = QHBoxLayout(self.tabs_host)
+        self.tabs_layout.setContentsMargins(0, 0, 2, 0)
+        self.tabs_layout.setSpacing(3)
+        row.addWidget(self.tabs_host, 1)
 
         self.min_button = self._button("–", "Minimieren", self._minimize, "titleButton")
         self.max_button = self._button("☐", "Maximieren", self._toggle_maximize, "titleButton")
         self.close_button = self._button("✕", "Schließen", window.close, "titleCloseButton")
         for button in (self.min_button, self.max_button, self.close_button):
             row.addWidget(button)
+
+    def set_tab_widgets(self, new_tab_button: QWidget, tab_bar: QWidget) -> None:
+        """Put the new-tab control and closable tabs directly in the window's top title bar."""
+        for widget in (new_tab_button, tab_bar):
+            widget.setParent(self.tabs_host)
+            self.tabs_layout.addWidget(widget)
+        self.tabs_host.setVisible(True)
 
     def _button(self, text: str, tip: str, callback, name: str) -> QToolButton:
         button = QToolButton(self)
@@ -111,7 +127,7 @@ class TitleBar(QWidget):
     # ---------------------------------------------------------------- Zustand
     def set_title(self, text: str) -> None:
         metrics = self.title_label.fontMetrics()
-        self.title_label.setText(metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(120, self.width() - 260)))
+        self.title_label.setText(metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(40, self.title_label.width())))
         self.title_label.setToolTip(text)
 
     def set_icon(self, icon: QIcon) -> None:

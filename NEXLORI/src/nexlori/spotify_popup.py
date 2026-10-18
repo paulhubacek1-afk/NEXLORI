@@ -55,13 +55,29 @@ class SpotifyPopup(QDialog):
         root.addLayout(quick_row)
 
         self.view = QWebEngineView(self)
-        self.view.setPage(QWebEnginePage(profile, self.view))
-        self.view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        page = QWebEnginePage(profile, self.view)
+        self.view.setPage(page)
+        page_settings = self.view.settings()
+        page_settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        page_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        page_settings.setAttribute(QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False)
+        page_settings.setAttribute(QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True)
+        try:
+            page.setAudioMuted(False)
+        except AttributeError:
+            pass  # ältere Qt-Versionen erlauben die Audio-Stummschaltung nicht explizit
+        self.status = QLabel(
+            "Melde dich bei Spotify an und starte die Wiedergabe direkt im Player. "
+            "Bei fehlendem Ton auch den Windows-Lautstärkemixer prüfen.", self
+        )
+        self.status.setWordWrap(True)
+        try:
+            page.recentlyAudibleChanged.connect(self._audio_state_changed)
+        except AttributeError:
+            pass
+        self.view.loadFinished.connect(self._load_finished)
         self.view.load(QUrl("https://open.spotify.com/"))
         root.addWidget(self.view, 1)
-
-        self.status = QLabel("Tipp: Füge einen Spotify-Track- oder Playlist-Link ein.", self)
-        self.status.setWordWrap(True)
         root.addWidget(self.status)
 
     def _toggle_always_on_top(self, enabled: bool) -> None:
@@ -77,19 +93,22 @@ class SpotifyPopup(QDialog):
             QMessageBox.warning(self, "Spotify-Link", str(exc))
             return
         self.status.setText("Spotify wird geladen …")
-        try:
-            self.view.loadFinished.disconnect(self._load_finished)
-        except (RuntimeError, TypeError):
-            pass
-        self.view.loadFinished.connect(self._load_finished)
         self.view.setUrl(QUrl(target))
 
     def _load_finished(self, ok: bool) -> None:
         self.status.setText(
-            "Spotify-Inhalt geladen." if ok else
+            "Spotify-Seite geladen. Starte die Wiedergabe direkt in Spotify; bei fehlendem Ton den "
+            "Windows-Lautstärkemixer prüfen." if ok else
             "Spotify konnte den Inhalt nicht laden. Prüfe den Link, die Anmeldung oder die Netzwerkverbindung."
         )
-        try:
-            self.view.loadFinished.disconnect(self._load_finished)
-        except (RuntimeError, TypeError):
-            pass
+        if ok:
+            try:
+                self.view.page().setAudioMuted(False)
+            except AttributeError:
+                pass
+
+    def _audio_state_changed(self, audible: bool) -> None:
+        if audible:
+            self.status.setText("Spotify gibt Audio wieder.")
+        elif self.view.url().host() == "open.spotify.com":
+            self.status.setText("Wiedergabe starten. Wenn kein Ton kommt, den Windows-Lautstärkemixer prüfen.")

@@ -1,4 +1,4 @@
-from nexlori.core.settings import Settings
+from nexlori.core.settings import DEFAULT_SEARCH_URL, Settings, canonical_search_url
 
 
 def test_addon_and_browser_preferences_roundtrip(tmp_path):
@@ -35,3 +35,10 @@ def test_invalid_extension_enabled_value_is_rejected():
         assert "extensions_enabled" in str(exc)
     else:
         raise AssertionError("Invalid extension setting was accepted")
+
+
+def test_legacy_duckduckgo_template_is_normalized():
+    legacy = "https://html.duckduckgo.com/html/?q={}"
+    assert canonical_search_url(legacy) == DEFAULT_SEARCH_URL
+    assert Settings().search_url == DEFAULT_SEARCH_URL
+    assert canonical_search_url("https://www.google.com/search?q={}") == "https://www.google.com/search?q={}"

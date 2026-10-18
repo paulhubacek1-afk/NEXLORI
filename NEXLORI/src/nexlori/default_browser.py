@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -9,9 +10,13 @@ def register_windows_browser(executable: str | None = None) -> bool:
     """Register Nexlori for HTTP/HTTPS and HTML files without changing UserChoice."""
     if os.name != "nt":
         return False
+    if executable is None:
+        if not getattr(sys, "frozen", False):
+            return False  # niemals versehentlich Python selbst als Browser registrieren
+        executable = sys.executable
     import winreg
 
-    exe = str(Path(executable or __import__("sys").executable).resolve())
+    exe = str(Path(executable).resolve())
     if not exe.lower().endswith(".exe"):
         # In source mode register the Python launcher only if explicitly requested; avoid a broken association.
         return False

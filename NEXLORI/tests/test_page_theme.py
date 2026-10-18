@@ -41,17 +41,17 @@ def test_combined_themes_keep_base_readability_and_mix_colours():
     assert BUILTIN_THEMES["pride-bi"].stripes[-1] in combo.stripes
 
 
-def test_theme_combination_rejects_more_than_four_themes():
+def test_theme_combination_rejects_more_than_eight_themes():
     try:
-        combine_themes(["dunkel", "pride-trans", "pride-bi", "cyberpunk", "gothic"])
+        combine_themes(["dunkel", "pride-trans", "pride-bi", "cyberpunk", "gothic", "forest", "ocean", "sakura", "aurora"])
     except ValueError as exc:
-        assert "vier" in str(exc)
+        assert "acht" in str(exc)
     else:
         raise AssertionError("more than four themes should be rejected")
 
 
-def test_settings_accept_up_to_three_additional_themes():
-    settings = Settings(theme="dunkel", theme_mix=["pride-trans", "cyberpunk", "pride-bi"])
+def test_settings_accept_up_to_seven_additional_themes():
+    settings = Settings(theme="dunkel", theme_mix=["pride-trans", "cyberpunk", "pride-bi", "gothic", "forest", "ocean", "sakura"])
     assert not settings.problems()
-    settings.theme_mix.append("gothic")
+    settings.theme_mix.append("aurora")
     assert any("theme_mix" in problem for problem in settings.problems())

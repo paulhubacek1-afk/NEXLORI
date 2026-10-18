@@ -14,10 +14,19 @@ from .builtin_addons import ADDON_IDS, default_states
 from .themes import BUILTIN_THEMES, is_known_theme
 
 
+DEFAULT_SEARCH_URL = "https://duckduckgo.com/?q={}"
+
+
+def canonical_search_url(template: str) -> str:
+    """Normalize legacy search templates so all Nexlori search fields use one provider URL."""
+    value = template.strip() if isinstance(template, str) else DEFAULT_SEARCH_URL
+    return DEFAULT_SEARCH_URL if value == "https://html.duckduckgo.com/html/?q={}" else value
+
+
 @dataclass
 class Settings:
     theme: str = "dunkel"
-    theme_mix: list[str] = field(default_factory=list)  # bis zu drei zusätzliche Themes zur Basis
+    theme_mix: list[str] = field(default_factory=list)  # bis zu sieben zusätzliche Themes zur Basis
     mode: str = Mode.NORMAL.value
     saver_level: str = SaverLevel.NORMAL.value
     block_trackers: bool = True
@@ -31,7 +40,7 @@ class Settings:
     popup_size: str = "small"
     notify_track_change: bool = False
     site_allowlist: list[str] = field(default_factory=list)
-    search_url: str = "https://html.duckduckgo.com/html/?q={}"  # {} wird durch die Suchanfrage ersetzt
+    search_url: str = DEFAULT_SEARCH_URL  # {} wird durch die Suchanfrage ersetzt
     page_zoom: float = 1.0  # zusätzlich zur Bildschirmskalierung
     adapt_page_theme: bool = False  # standardmäßig kein CSS-Eingriff in fremde Websites
     pride_favorites: list[str] = field(default_factory=lambda: ["pride-gay", "pride-trans", "pride-regenbogen"])
@@ -41,6 +50,7 @@ class Settings:
         default_factory=lambda: ["home", "bookmark", "spotify", "page_theme", "theme"]
     )
     auto_update_check: bool = True
+    memory_saver: bool = True  # entlädt inaktive Tabs, um RAM freizugeben
     ubol_enabled: bool = True
     allow_web_popups: bool = False
     block_nsfw: bool = True  # lokaler URL-Filter, standardmäßig aktiv
@@ -54,8 +64,8 @@ class Settings:
         out = []
         if not is_known_theme(self.theme):
             out.append(f"theme: unbekannt ({self.theme!r})")
-        if not isinstance(self.theme_mix, list) or len(self.theme_mix) > 3:
-            out.append("theme_mix: höchstens drei zusätzliche Themes erwartet")
+        if not isinstance(self.theme_mix, list) or len(self.theme_mix) > 7:
+            out.append("theme_mix: höchstens sieben zusätzliche Themes erwartet")
         elif (
             any(not is_known_theme(name) or name == self.theme for name in self.theme_mix)
             or len([name for name in self.theme_mix if isinstance(name, str)])
@@ -94,7 +104,7 @@ class Settings:
             or any(icon not in valid_icons for icon in self.toolbar_visible_icons)
         ):
             out.append("toolbar_visible_icons: ungültige oder doppelte Icons")
-        for field_name in ("auto_update_check", "ubol_enabled", "allow_web_popups", "block_nsfw"):
+        for field_name in ("auto_update_check", "memory_saver", "ubol_enabled", "allow_web_popups", "block_nsfw"):
             if not isinstance(getattr(self, field_name), bool):
                 out.append(f"{field_name}: true oder false erwartet")
         if (

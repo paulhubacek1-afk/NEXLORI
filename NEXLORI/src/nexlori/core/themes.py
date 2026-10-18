@@ -292,7 +292,7 @@ def installed_theme_names() -> list[str]:
 
 
 def combine_themes(names: list[str] | tuple[str, ...]) -> Theme:
-    """Combine up to four themes while keeping the first theme's readable base palette.
+    """Combine up to eight themes while keeping the first theme's readable base palette.
 
     The base theme supplies the background, surfaces, text and primary accent.
     Every selected theme contributes its flag colours to the top gradient.
@@ -300,8 +300,8 @@ def combine_themes(names: list[str] | tuple[str, ...]) -> Theme:
     selected_names = list(dict.fromkeys(names))
     if not selected_names:
         selected_names = ["dunkel"]
-    if len(selected_names) > 4:
-        raise ValueError("Es können höchstens vier Themes kombiniert werden.")
+    if len(selected_names) > 8:
+        raise ValueError("Es können höchstens acht Themes kombiniert werden.")
     unknown = [name for name in selected_names if not is_known_theme(name)]
     if unknown:
         raise ValueError("Unbekannte Themes: " + ", ".join(unknown))
