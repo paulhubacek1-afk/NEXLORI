@@ -1,5 +1,15 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.2.0 – Browser-Update, Audio, Speicher und Theme-Packs
+
+### Neu und verbessert
+- Einheitliche Suchmaschine für Adressleiste und Startseiten-Suche; offene Startseiten werden bei Änderungen aktualisiert.
+- Schließbare Tabs rücken in der eigenen Titelleiste nach oben; die Fensterknöpfe bleiben rechts.
+- Spotify-Mini-Player mit expliziten Audio-Einstellungen und Statushinweis zur Wiedergabe.
+- Aktion zur Registrierung als Windows-Standardbrowser; die finale Auswahl bestätigt weiterhin Windows.
+- Begrenzter Web-Cache, automatisches Entladen inaktiver Tabs per Speichersparmodus und verzögerte Hintergrundjobs beim Start.
+- Bis zu acht kombinierbare Themes sowie herunterladbare, importierbare und exportierbare Theme-Packs.
+
 ## 1.1.0 – Theme-Shop, mehr Add-ons, Titelleiste in Theme-Farben, Animationen
 
 ### Neu
