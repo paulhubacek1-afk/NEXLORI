@@ -61,6 +61,7 @@ def test_tabs_and_search_bar_are_above_the_web_page(window):
     view = window.current_view()
     if window.title_bar is not None:
         assert window.tabs.bar.parentWidget() is window.title_bar.tabs_host
+        assert not window.tab_row_widget.isVisible()
         assert y_of(window, window.title_bar) <= y_of(window, window.tabs.bar)
     else:
         assert y_of(window, window.tab_row_widget) < y_of(window, window.toolbar_widget)

@@ -468,6 +468,8 @@ class NexloriWindow(QMainWindow):
             tab_row.removeWidget(self.new_tab_button)
             tab_row.removeWidget(self.tabs.bar)
             self.title_bar.set_tab_widgets(self.new_tab_button, self.tabs.bar)
+            # The old container is kept for fullscreen bookkeeping, but must never paint over the page.
+            self.tab_row_widget.hide()
         else:
             outer.addWidget(self.tab_row_widget)
 
