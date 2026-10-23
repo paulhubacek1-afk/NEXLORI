@@ -49,7 +49,7 @@
 
 ### Hinweise
 - Der Theme-Shop braucht eine Internetverbindung und lädt den Katalog von `raw.githubusercontent.com`. Bereits installierte Themes funktionieren offline.
-- Nicht angeschlossen sind weiterhin der lokale NSFW-Filter (`block_nsfw`), die internen Fehlerseiten (`error_page_html`) und die Registrierung als Windows-Standardbrowser (`register_windows_browser`): Sie sind im Code vorhanden, werden aber nirgends aufgerufen.
+- Der lokale NSFW-Filter (`block_nsfw`) und die internen Fehlerseiten (`error_page_html`) sind weiterhin nicht vollständig angeschlossen. Die Standardbrowser-Registrierung ist über das Menü und die Einstellungen erreichbar; die endgültige Auswahl bestätigt Windows.
 
 ## 1.0.1 – Startstabilität und Release-Prüfungen
 
