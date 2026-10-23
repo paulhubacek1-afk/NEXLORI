@@ -2005,6 +2005,51 @@ QPushButton:disabled {{ color:{muted}; }}
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Standardbrowser", f"Nexlori konnte nicht registriert werden: {exc}")
 
+    def _offer_save_credentials(self, view: QWebEngineView, username: str, password: str) -> None:
+        """Ask before saving a password submitted through a secure, same-origin login form."""
+        if self._credential_prompt_open or self.tabs.indexOf(view) < 0:
+            self._resume_pending_login(view)
+            return
+        current = view.url()
+        if current.scheme().lower() != "https" or not current.host() or not username.strip() or not password:
+            self._resume_pending_login(view)
+            return
+        self._credential_prompt_open = True
+        site = f"{current.scheme()}://{current.host()}"
+        try:
+            answer = QMessageBox.question(
+                self, "Passwort sichern?",
+                f"Nexlori hat eine Anmeldung bei {current.host()} erkannt.\n\n"
+                "Möchtest du Benutzername und Passwort in deinem verschlüsselten lokalen Tresor speichern?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                from .password_vault_ui import save_login_credentials
+                saved = save_login_credentials(
+                    self, self.settings_path.parent / "password-vault.json",
+                    site=site, username=username[:1024], password=password[:4096],
+                )
+                if saved:
+                    self.statusBar().showMessage("Anmeldedaten wurden verschlüsselt gespeichert.", 4000)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Passwort-Tresor", f"Anmeldedaten konnten nicht gespeichert werden: {exc}")
+        finally:
+            self._credential_prompt_open = False
+            self._resume_pending_login(view)
+
+    def _resume_pending_login(self, view: QWebEngineView) -> None:
+        """Continue the form submit after the save prompt, whether the user saves or skips."""
+        if self.tabs.indexOf(view) < 0:
+            return
+        try:
+            view.page().runJavaScript(
+                "if (typeof window.__nexloriResumePendingLogin === 'function') "
+                "window.__nexloriResumePendingLogin();"
+            )
+        except RuntimeError:
+            pass
+
     def show_spotify_popup(self) -> None:
         try:
             from .spotify_popup import SpotifyPopup
@@ -2100,6 +2145,97 @@ QPushButton:disabled {{ color:{muted}; }}
             QMessageBox.information(self, "Nexlori-Update", "Update verifiziert. Nexlori wird geschlossen, aktualisiert und anschließend neu gestartet.")
             self.close()
             QApplication.quit()
+
+    def show_developer_tools(self) -> None:
+        """Open Chromium DevTools for the active tab: Elements, Console, Network and Performance."""
+        view = self.current_view()
+        if view is None:
+            return
+        if self._devtools_window is not None and self._devtools_window.isVisible():
+            self._devtools_window.hide()
+            return
+        if self._devtools_window is None:
+            window = QMainWindow(self, Qt.WindowType.Window)
+            window.setWindowTitle("Nexlori · Entwicklerwerkzeuge")
+            window.resize(1050, 720)
+            dev_view = QWebEngineView(window)
+            dev_page = QWebEnginePage(self.profile, dev_view)
+            dev_view.setPage(dev_page)
+            window.setCentralWidget(dev_view)
+            self._devtools_window = window
+            self._devtools_view = dev_view
+        try:
+            view.page().setDevToolsPage(self._devtools_view.page())
+            self._devtools_window.setWindowTitle(
+                f"Nexlori · Entwicklerwerkzeuge — {view.title() or view.url().host() or 'Tab'}"
+            )
+            self._devtools_window.show()
+            self._devtools_window.raise_()
+            self._devtools_window.activateWindow()
+        except (AttributeError, RuntimeError) as exc:
+            QMessageBox.warning(self, "Entwicklerwerkzeuge", f"DevTools konnten nicht geöffnet werden: {exc}")
+
+    def show_browser_information(self) -> None:
+        """Show useful runtime, profile, renderer and page diagnostics without secrets."""
+        view = self.current_view()
+        page = view.page() if view else None
+        user_agent = self.profile.httpUserAgent()
+        match = re.search(r"(?:Chrome|Chromium)/([^\\s]+)", user_agent)
+        try:
+            process_id = (
+                str(page.renderProcessPid())
+                if page is not None and hasattr(page, "renderProcessPid")
+                else "nicht verfügbar"
+            )
+        except (RuntimeError, TypeError):
+            process_id = "nicht verfügbar"
+        current_url = view.url().toString() if view else "—"
+        current_title = view.title() if view else "—"
+        info = (
+            f"Nexlori: {APP_VERSION}\n"
+            f"Qt: {qVersion()}\nPySide6: {PYSIDE_VERSION}\nPython: {platform.python_version()}\n"
+            f"Betriebssystem: {platform.platform()}\nArchitektur: {platform.machine()}\n"
+            f"Chromium aus User-Agent: {match.group(1) if match else 'nicht eindeutig erkannt'}\n"
+            f"Renderer-Prozess-ID: {process_id}\nTabs geöffnet: {self.tabs.count()}\n"
+            f"Aktueller Titel: {current_title}\nAktuelle URL: {current_url}\n"
+            f"Profilordner: {self.storage_dir}\nCache-Ordner: {self.cache_dir}\n"
+            f"Einstellungen: {self.settings_path}\nLesezeichen: {len(self.bookmarks)}\n"
+            f"uBlock Origin Lite aktiviert: {'Ja' if self.settings.ubol_enabled else 'Nein'}\n"
+            f"Speichersparmodus: {'Ja' if self.settings.memory_saver else 'Nein'}\n"
+            f"Hintergrundbetrieb beim Schließen: {'Ja' if self.settings.background_on_close else 'Nein'}\n"
+            f"User-Agent: {user_agent}\n"
+        )
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nexlori · Browser-Diagnose")
+        dialog.resize(760, 560)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Technische Informationen für die Fehlersuche. Passwörter und Inhalte des Tresors werden nicht angezeigt.",
+            dialog,
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        text = QPlainTextEdit(dialog)
+        text.setReadOnly(True)
+        text.setPlainText(info)
+        layout.addWidget(text, 1)
+        actions = QHBoxLayout()
+        copy_button = QPushButton("Informationen kopieren", dialog)
+        copy_button.clicked.connect(lambda: QApplication.clipboard().setText(info))
+        folder_button = QPushButton("Datenordner öffnen", dialog)
+        folder_button.clicked.connect(self.open_data_folder)
+        close_button = QPushButton("Schließen", dialog)
+        close_button.clicked.connect(dialog.accept)
+        actions.addWidget(copy_button)
+        actions.addWidget(folder_button)
+        actions.addStretch(1)
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+        dialog.exec()
+
+    def open_data_folder(self) -> None:
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.settings_path.parent)))
 
     def show_about(self) -> None:
         QMessageBox.about(
@@ -2452,9 +2588,32 @@ QPushButton:disabled {{ color:{muted}; }}
                 view.deleteLater()
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        if (
+            not self._force_exit
+            and self.settings.background_on_close
+            and self.tray_icon is not None
+            and self.tray_icon.isVisible()
+        ):
+            event.ignore()
+            self.hide()
+            if self._devtools_window is not None:
+                self._devtools_window.hide()
+            if self._spotify_popup is not None:
+                self._spotify_popup.hide()
+            self.tray_icon.showMessage(
+                "Nexlori läuft im Hintergrund",
+                "Klicke auf das Nexlori-Symbol im Infobereich, um den Browser zu öffnen oder zu beenden.",
+                QSystemTrayIcon.MessageIcon.Information,
+                3000,
+            )
+            return
         self._closing = True
         self._sleep_timer.stop()
         self.accent_line.pause(True)
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
+        if self._devtools_window is not None:
+            self._devtools_window.close()
         self._save_settings()
         self._save_bookmarks()
         self._release_web_views()
