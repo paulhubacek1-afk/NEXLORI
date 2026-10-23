@@ -7,10 +7,12 @@ def test_addon_and_browser_preferences_roundtrip(tmp_path):
     assert settings.ubol_enabled is True
     assert settings.auto_update_check is True
     assert settings.allow_web_popups is False
+    assert settings.background_on_close is True
 
     settings.ubol_enabled = False
     settings.auto_update_check = False
     settings.allow_web_popups = True
+    settings.background_on_close = False
     settings.extensions_enabled = {
         "ublock-origin-lite": False,
         "dark-reader": True,
@@ -21,6 +23,7 @@ def test_addon_and_browser_preferences_roundtrip(tmp_path):
     assert saved.ubol_enabled is False
     assert saved.auto_update_check is False
     assert saved.allow_web_popups is True
+    assert saved.background_on_close is False
     assert saved.extensions_enabled == {
         "ublock-origin-lite": False,
         "dark-reader": True,
