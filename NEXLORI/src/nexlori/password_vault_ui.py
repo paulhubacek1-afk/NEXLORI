@@ -28,15 +28,15 @@ from .password_vault import PasswordVault, VaultError, generate_password
 
 
 class EntryDialog(QDialog):
-    def __init__(self, parent=None, *, default_site: str = ""):
+    def __init__(self, parent=None, *, default_site: str = "", default_username: str = "", default_password: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Passwort speichern")
         self.setMinimumWidth(460)
         form = QFormLayout(self)
 
         self.site = QLineEdit(default_site, self)
-        self.username = QLineEdit(self)
-        self.password = QLineEdit(self)
+        self.username = QLineEdit(default_username, self)
+        self.password = QLineEdit(default_password, self)
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
         show_password = QCheckBox("Passwort anzeigen", self)
         show_password.toggled.connect(
@@ -242,6 +242,28 @@ class PasswordVaultDialog(QDialog):
             QMessageBox.warning(self, "Fehler", str(exc))
             return
         self.refresh()
+
+
+def save_login_credentials(parent, path: str | Path, *, site: str, username: str, password: str) -> bool:
+    """Offer a form-submitted login for the encrypted vault; never save without explicit confirmation."""
+    vault = _open_vault(parent, Path(path))
+    if vault is None:
+        return False
+    try:
+        dialog = EntryDialog(
+            parent, default_site=site, default_username=username, default_password=password
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        try:
+            vault.add_entry(**dialog.value())
+        except (VaultError, OSError) as exc:
+            QMessageBox.warning(parent, "Passwort konnte nicht gespeichert werden", str(exc))
+            return False
+        QMessageBox.information(parent, "Passwort gespeichert", "Die Zugangsdaten wurden verschlüsselt in deinem lokalen Nexlori-Tresor gespeichert.")
+        return True
+    finally:
+        vault.lock()
 
 
 def open_password_manager(parent, path: str | Path, *, default_site: str = "") -> None:

@@ -1,5 +1,20 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.3.0 – Startseite, Hintergrundbetrieb und Entwicklerwerkzeuge
+
+### Neu und verbessert
+- Lesezeichen werden direkt unter dem Suchfeld auf der Startseite als anklickbare Schnellzugriffe angezeigt.
+- Die Startseite verlinkt auf Bühne Total, MembersPlugin, das Kartenbuchungsprogramm, Lunares, ShareZone Self-hosted und Nexlori auf GitHub.
+- F12 öffnet Chromium-Entwicklerwerkzeuge. Ein Diagnosefenster zeigt Browser-, Chromium-, Python-, Qt-, Geräte-, Profil- und Tab-Informationen, ohne Tresorpasswörter auszugeben.
+- Nexlori kann beim Schließen im Windows-Infobereich weiterlaufen. Das Tray-Menü öffnet den Browser wieder und enthält einen eigenen Befehl zum vollständigen Beenden; die Funktion ist abschaltbar.
+- Bei erkannten Anmeldungen über HTTPS fragt Nexlori, ob die Zugangsdaten in den lokal verschlüsselten Tresor gespeichert werden sollen. Ohne Zustimmung werden sie nicht gespeichert; automatisches Ausfüllen ist weiterhin deaktiviert.
+- Version auf 1.3.0 angehoben und Einstellungen für den Hintergrundbetrieb ergänzt.
+
+### Behoben und geprüft
+- Startseiten-Lesezeichen werden nach dem Hinzufügen oder Entfernen unmittelbar aktualisiert.
+- Browser-Diagnose erkennt die Chromium-Version aus dem User-Agent.
+
+## 1.2.0 – Browser-Update, Audio, Speicher und Theme-Packs
 ## 1.2.0 – Browser-Update, Audio, Speicher und Theme-Packs
 
 ### Neu und verbessert
@@ -34,7 +49,7 @@
 
 ### Hinweise
 - Der Theme-Shop braucht eine Internetverbindung und lädt den Katalog von `raw.githubusercontent.com`. Bereits installierte Themes funktionieren offline.
-- Nicht angeschlossen sind weiterhin der lokale NSFW-Filter (`block_nsfw`), die internen Fehlerseiten (`error_page_html`) und die Registrierung als Windows-Standardbrowser (`register_windows_browser`): Sie sind im Code vorhanden, werden aber nirgends aufgerufen.
+- Der lokale NSFW-Filter (`block_nsfw`) und die internen Fehlerseiten (`error_page_html`) sind weiterhin nicht vollständig angeschlossen. Die Standardbrowser-Registrierung ist über das Menü und die Einstellungen erreichbar; die endgültige Auswahl bestätigt Windows.
 
 ## 1.0.1 – Startstabilität und Release-Prüfungen
 

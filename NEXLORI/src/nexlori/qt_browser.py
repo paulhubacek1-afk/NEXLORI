@@ -7,15 +7,17 @@ from __future__ import annotations
 import io
 import json
 import os
+import platform
 import re
 import sys
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from PySide6 import __version__ as PYSIDE_VERSION
 from PySide6.QtCore import (
-    QEventLoop, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QStringListModel, QThread, QTimer, QUrl,
-    QUrlQuery, Qt, Signal,
+    QFile, QIODevice, QObject, QEventLoop, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect,
+    QStringListModel, QThread, QTimer, QUrl, QUrlQuery, Qt, Signal, Slot, qVersion,
 )
 from PySide6.QtGui import (
     QAction, QActionGroup, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut,
@@ -37,12 +39,14 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QGraphicsOpacityEffect,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
     QStatusBar,
     QTabWidget,
+    QSystemTrayIcon,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -56,6 +60,7 @@ from PySide6.QtWebEngineCore import (
     QWebEngineUrlRequestInterceptor,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebChannel import QWebChannel
 
 from . import __version__
 from .browser import normalize_input
@@ -81,6 +86,7 @@ from .extension_utils import (
     is_builtin_extension,
   )
 from .page_theme import build_page_theme_script
+from .start_page import build_start_page as _start_page
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
@@ -124,83 +130,6 @@ def _theme_gradient(theme: Theme) -> str:
         stops.append(f"stop:{position:.3f} {color}")
     return "qlineargradient(x1:0, y1:0, x2:1, y2:0, " + ", ".join(stops) + ")"
 
-
-def _start_page(theme: Theme, search_url: str, pride_mode: bool = False) -> str:
-    """A polished, theme-aware private start page; its animations never affect normal websites."""
-    colors = ", ".join(theme.stripes or (theme.accent,))
-    search_template = json.dumps(search_url, ensure_ascii=False)
-    pride_visuals = (
-        '<div class="pride-glow glow-a" aria-hidden="true"></div>'
-        '<div class="pride-glow glow-b" aria-hidden="true"></div>'
-        '<div class="pride-glow glow-c" aria-hidden="true"></div>'
-        if pride_mode else ""
-    )
-    pride_css = """
-.pride-glow { position:fixed; z-index:0; width:38vw; height:38vw; min-width:230px; min-height:230px;
-  border-radius:50%; filter:blur(55px); opacity:.16; pointer-events:none; animation:pride-drift 17s ease-in-out infinite alternate; }
-.glow-a { left:-13vw; top:10vh; background:#ff3b8d; }
-.glow-b { right:-12vw; top:22vh; background:#35c8ff; animation-delay:-5s; }
-.glow-c { left:34vw; bottom:-27vw; background:#a56bff; animation-delay:-9s; }
-@keyframes pride-drift { from { transform:translate3d(0,-2vh,0) scale(.92); } to { transform:translate3d(2vw,3vh,0) scale(1.08); } }
-""" if pride_mode else ""
-    pride_pill = '<span class="pride-pill">✦ Pride colours in motion</span>' if pride_mode else ""
-    return f"""<!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Nexlori · Startseite</title>
-<style>
-:root {{ color-scheme: {'light' if relative_luminance(theme.bg) >= 0.5 else 'dark'}; }}
-* {{ box-sizing:border-box }}
-body {{ margin:0; min-height:100vh; overflow-x:hidden; background:{theme.bg}; color:{theme.fg}; font:16px 'Segoe UI',sans-serif; }}
-main {{ position:relative; z-index:1; width:min(900px,92vw); margin:0 auto; padding:42px 0 36px; animation:page-enter .55s cubic-bezier(.2,.8,.2,1) both; }}
-.stripe {{ height:5px; border-radius:5px; background:linear-gradient(90deg,{colors}); margin-bottom:32px; background-size:200% 100%; animation:stripe-flow 9s ease-in-out infinite alternate; }}
-.mark {{ display:inline-block; color:{theme.accent}; font-size:12px; font-weight:800; letter-spacing:.22em; }}
-h1 {{ margin:14px 0 8px; font-size:clamp(38px,6.5vw,68px); line-height:1.04; letter-spacing:-.055em; }}
-p {{ color:{theme.fg}; opacity:.82; line-height:1.65; }}
-.intro {{ max-width:650px; font-size:17px; }}
-.pride-pill {{ display:inline-block; margin-top:14px; padding:7px 12px; border:1px solid {theme.accent}55; border-radius:100px; color:{theme.accent}; font-size:12px; }}
-.bar {{ display:flex; gap:10px; background:{theme.surface}; border:1px solid {theme.accent}80; border-radius:20px; padding:9px; margin:28px 0 24px; box-shadow:0 16px 50px {theme.accent}16; transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease; }}
-.bar:focus-within {{ border-color:{theme.accent}; transform:translateY(-2px); box-shadow:0 18px 54px {theme.accent}25; }}
-input {{ flex:1; min-width:0; border:0; outline:0; padding:13px; background:transparent; color:{theme.fg}; font:inherit; }}
-button {{ background:{theme.accent}; color:{theme.bg}; border:0; border-radius:13px; padding:0 20px; font-weight:800; cursor:pointer; transition:transform .18s ease,filter .18s ease; }}
-button:hover {{ transform:translateY(-1px); filter:brightness(1.08); }} button:active {{ transform:scale(.98); }}
-.tiles {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:12px; }}
-a.tile {{ text-decoration:none; color:{theme.fg}; display:block; border:1px solid {theme.surface}; border-radius:17px; padding:19px; background:{theme.surface}; transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease; animation:tile-enter .55s ease both; }}
-a.tile:nth-child(2) {{ animation-delay:.05s; }} a.tile:nth-child(3) {{ animation-delay:.10s; }} a.tile:nth-child(4) {{ animation-delay:.15s; }} a.tile:nth-child(5) {{ animation-delay:.20s; }} a.tile:nth-child(6) {{ animation-delay:.25s; }}
-a.tile:hover {{ border-color:{theme.accent}; transform:translateY(-4px); box-shadow:0 12px 30px {theme.accent}18; }}
-a.tile:focus-visible, a.cta:focus-visible, button:focus-visible {{ outline:2px solid {theme.accent}; outline-offset:3px; }}
-.tile-icon {{ transition:transform .24s ease,color .24s ease; }}
-a.tile:hover .tile-icon {{ transform:translateY(-2px) rotate(-5deg) scale(1.1); }}
-.community {{ margin:20px 0 22px; display:flex; justify-content:center; }}
-a.cta {{ display:inline-flex; align-items:center; gap:10px; text-decoration:none; font-weight:600; color:{theme.bg}; background:{theme.accent}; padding:12px 24px; border-radius:999px; transition:transform .2s ease,box-shadow .2s ease; }}
-a.cta:hover {{ transform:translateY(-2px); box-shadow:0 10px 26px {theme.accent}55; }}
-.tile-icon {{ display:block; color:{theme.accent}; font-size:22px; margin-bottom:9px; }}
-small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
-.foot {{ font-size:12px; margin-top:28px; opacity:.56; }}
-@keyframes page-enter {{ from {{ opacity:0; transform:translateY(9px); }} to {{ opacity:1; transform:translateY(0); }} }}
-@keyframes tile-enter {{ from {{ opacity:0; transform:translateY(10px); }} to {{ opacity:1; transform:translateY(0); }} }}
-@keyframes stripe-flow {{ from {{ background-position:0 0; }} to {{ background-position:100% 0; }} }}
-{pride_css}
-@media (prefers-reduced-motion:reduce) {{ *,*::before,*::after {{ animation:none !important; transition:none !important; }} }}
-</style></head><body>{pride_visuals}<main><div class="stripe"></div><span class="mark">NEXLORI / BROWSER</span>
-<h1>Das Web. Auf deine Art.</h1><p class="intro">Ein Browser, der sich deinem Stil anpasst – mit persönlicher Farbwelt, ruhiger Oberfläche und lokalem Schutz.</p>{pride_pill}
-<form class="bar" id="search"><input id="query" autocomplete="off" autofocus placeholder="Suchen oder Webadresse eingeben" aria-label="Suchen oder Webadresse eingeben"><button type="submit">Los ↗</button></form>
-<div class="community"><a class="cta" href="nexlori://community/discord" title="Nexlori-Community auf Discord">💬 Discord-Community beitreten</a></div>
-<div class="tiles">
-<a class="tile" href="https://www.wikipedia.org/"><span class="tile-icon">⌕</span><strong>Wissen</strong><small>Wikipedia</small></a>
-<a class="tile" href="https://www.youtube.com/"><span class="tile-icon">▶</span><strong>Video</strong><small>YouTube</small></a>
-<a class="tile" href="https://github.com/"><span class="tile-icon">⌘</span><strong>Entwickeln</strong><small>GitHub</small></a>
-<a class="tile" href="nexlori://addons"><span class="tile-icon">＋</span><strong>Add-ons</strong><small>Erweiterungen entdecken und verwalten</small></a>
-<a class="tile" href="nexlori://home-network"><span class="tile-icon">⌂</span><strong>Heimnetz</strong><small>Router, NAS, Drucker und Smart Home</small></a>
-<a class="tile" href="nexlori://settings"><span class="tile-icon">✦</span><strong>Dein Nexlori</strong><small>Themes, Suchmaschine und Einstellungen</small></a>
-</div><div class="foot">Nexlori · Chromium-WebEngine · Schutz und Einstellungen bleiben lokal.</div>
-<script>
-const template = {search_template};
-document.getElementById('search').addEventListener('submit', function(e) {{
- e.preventDefault(); const q=document.getElementById('query').value.trim(); if(!q) return;
- const looksLikeUrl=/^(https?:\\/\\/|file:\\/\\/)/i.test(q) || (/^[^\\s]+\\.[^\\s]+$/.test(q) && !q.includes(' '));
- location.href=looksLikeUrl?(q.match(/^[a-z]+:\\/\\//i)?q:'https://'+q):template.replace("{{}}",encodeURIComponent(q));
-}});
-</script></main></body></html>"""
 
 def _line_icon(kind: str, color: str) -> QIcon:
     """Kleine, selbst gezeichnete Symbole in Theme-Farbe (Schloss, Warnung, Nexlori-Punkt, Löschen)."""
@@ -321,6 +250,19 @@ class UpdateWorker(QThread):
             self.result_data["error"] = str(exc)
 
 
+class CredentialCaptureBridge(QObject):
+    """Small page-scoped bridge used only after a secure login form is submitted."""
+
+    def __init__(self, owner: "NexloriWindow", view: QWebEngineView):
+        super().__init__(view)
+        self.owner = owner
+        self.view = view
+
+    @Slot(str, str)
+    def offerCredentials(self, username: str, password: str) -> None:  # noqa: N802
+        self.owner._offer_save_credentials(self.view, str(username), str(password))
+
+
 class BrowserPage(QWebEnginePage):
     def __init__(self, profile: QWebEngineProfile, owner: "NexloriWindow", parent: QWidget):
         super().__init__(profile, parent)
@@ -389,6 +331,11 @@ class NexloriWindow(QMainWindow):
         self.bookmarks_path = settings_path.parent / "bookmarks.json"
         self.bookmarks = self._load_bookmarks()
         self._closing = False
+        self._force_exit = False
+        self._credential_prompt_open = False
+        self._devtools_window = None
+        self._devtools_view = None
+        self.tray_icon: QSystemTrayIcon | None = None
         self._self_test = self_test
         self._update_worker: UpdateWorker | None = None
         self._silent_update_check = True
@@ -407,6 +354,7 @@ class NexloriWindow(QMainWindow):
         self._page_theme_script = None
         self._refresh_page_theme_script()
         self._refresh_addons_script()
+        self._refresh_password_capture_script()
         try:
             self.extension_manager = self.profile.extensionManager()
             self.extension_manager.installFinished.connect(self._on_extension_installed)
@@ -419,6 +367,7 @@ class NexloriWindow(QMainWindow):
         self.resize(1240, 820)
         self.setMinimumSize(760, 480)
         self._build_ui()
+        self._setup_tray()
         self._apply_browser_theme()
         self._bind_shortcuts()
         self._start_tab_sleep_timer()
@@ -429,6 +378,50 @@ class NexloriWindow(QMainWindow):
         QTimer.singleShot(3200, self._ensure_default_extension)
         if self.settings.auto_update_check:
             QTimer.singleShot(10000, self._start_silent_update_check)
+
+    def _render_start_page(self) -> str:
+        """Build the start page with the latest saved bookmarks."""
+        return _start_page(self.theme, self.settings.search_url, bookmarks=self.bookmarks)
+
+    def _setup_tray(self) -> None:
+        """Keep Nexlori available from the Windows notification area while its window is hidden."""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray_icon = None
+            return
+        tray = QSystemTrayIcon(self.windowIcon(), self)
+        tray.setToolTip(f"Nexlori {APP_VERSION}")
+        menu = QMenu(self)
+        menu.addAction("Nexlori öffnen", self._show_from_tray)
+        menu.addAction("Neuer Tab", lambda: (self._show_from_tray(), self.new_tab()))
+        menu.addSeparator()
+        menu.addAction("Entwicklerwerkzeuge", self.show_developer_tools)
+        menu.addAction("Browser-Informationen", self.show_browser_information)
+        menu.addSeparator()
+        menu.addAction("Beenden", self.quit_application)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._tray_activated)
+        self.tray_icon = tray
+        tray.show()
+
+    def _tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._show_from_tray()
+
+    def _show_from_tray(self) -> None:
+        self.showNormal() if self.isMinimized() else self.show()
+        self.raise_()
+        self.activateWindow()
+        view = self.current_view()
+        if view is not None:
+            view.setFocus()
+
+    def quit_application(self) -> None:
+        """Explicit tray-menu exit bypasses close-to-tray and stops the application."""
+        self._force_exit = True
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
+        self.close()
+        QApplication.quit()
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -725,7 +718,7 @@ class NexloriWindow(QMainWindow):
                 view.page().setBackgroundColor(self._qt_color(self.theme.bg))
                 self.apply_page_theme(view)
                 if getattr(view, '_nexlori_start', False):
-                    view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl('about:blank'))
+                    view.setHtml(self._render_start_page(), QUrl('about:blank'))
         self.statusBar().showMessage(f"Themes kombiniert: {self.theme.label}", 3500)
 
     def edit_pride_favorites(self) -> None:
@@ -883,6 +876,10 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
         self.more_menu.addAction("Nexlori-Add-ons …", self.show_addons_center)
         self.tools_menu = self.more_menu.addMenu("Werkzeuge")
+        developer_menu = self.more_menu.addMenu("Entwickler")
+        developer_menu.addAction("Entwicklerwerkzeuge (F12)", self.show_developer_tools)
+        developer_menu.addAction("Browser-Informationen", self.show_browser_information)
+        developer_menu.addAction("Nexlori-Datenordner öffnen", self.open_data_folder)
         self.more_menu.addAction("Theme-Shop …", self.show_theme_shop)
         self.more_menu.addAction("Als Standardbrowser festlegen …", self.set_as_default_browser)
         self.more_menu.addAction("Einstellungen", self.show_settings, QKeySequence("Ctrl+,"))
@@ -921,6 +918,7 @@ class NexloriWindow(QMainWindow):
             ("Ctrl+D", self.toggle_bookmark),
             ("Ctrl+Shift+M", self.show_spotify_popup),
             ("Ctrl+Shift+P", self.show_password_manager),
+            ("F12", self.show_developer_tools),
             ("Ctrl+,", self.show_settings),
             ("Ctrl+Plus", lambda: self.change_zoom(0.1)),
             ("Ctrl+Minus", lambda: self.change_zoom(-0.1)),
@@ -1055,7 +1053,7 @@ QPushButton:disabled {{ color:{muted}; }}
                 view.page().setBackgroundColor(self._qt_color(self.theme.bg))
                 self.apply_page_theme(view)
                 if getattr(view, "_nexlori_start", False):
-                    view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+                    view.setHtml(self._render_start_page(), QUrl("about:blank"))
                 elif getattr(view, "_nexlori_internal", None):
                     self._show_internal_page(view, view._nexlori_internal)
         self.statusBar().showMessage(f"Theme: {self.theme.label}", 2500)
@@ -1067,6 +1065,87 @@ QPushButton:disabled {{ color:{muted}; }}
 
     def _build_page_theme_script(self, enabled: bool) -> str:
         return build_page_theme_script(self.theme, enabled)
+
+    def _refresh_password_capture_script(self) -> None:
+        """Install a form-submit watcher only on secure top-level pages."""
+        scripts = self.profile.scripts()
+        existing = getattr(self, "_password_capture_script", None)
+        if existing is not None:
+            try:
+                scripts.remove(existing)
+            except (RuntimeError, TypeError):
+                pass
+        resource = QFile(":/qtwebchannel/qwebchannel.js")
+        if not resource.open(QIODevice.OpenModeFlag.ReadOnly):
+            self._password_capture_script = None
+            return
+        try:
+            channel_source = bytes(resource.readAll()).decode("utf-8", errors="replace")
+        finally:
+            resource.close()
+        watcher = r"""
+(function () {
+  if (location.protocol !== "https:" || window.__nexloriPasswordCaptureInstalled) return;
+  window.__nexloriPasswordCaptureInstalled = true;
+  if (typeof QWebChannel !== "function" || !window.qt || !qt.webChannelTransport) return;
+  new QWebChannel(qt.webChannelTransport, function (channel) {
+    const bridge = channel.objects.nexloriCredentials;
+    if (!bridge || typeof bridge.offerCredentials !== "function") return;
+    document.addEventListener("submit", function (event) {
+      if (window.__nexloriBypassLoginCapture) {
+        window.__nexloriBypassLoginCapture = false;
+        return;
+      }
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      const passwordFields = Array.from(form.querySelectorAll('input[type="password"]'));
+      if (passwordFields.length !== 1) return;
+      const passwordField = passwordFields[0];
+      if (!passwordField.value) return;
+      const userFields = Array.from(form.querySelectorAll(
+        'input[autocomplete="username"], input[type="email"], input[name*="user" i], ' +
+        'input[id*="user" i], input[name*="login" i], input[id*="login" i], ' +
+        'input[name*="email" i], input[id*="email" i], input[type="text"]'
+      ));
+      const userField = userFields.find(function (field) {
+        return field !== passwordField && field.value && field.value.trim();
+      });
+      if (!userField) return;
+      let action;
+      try { action = new URL(form.action || location.href, location.href); } catch (_) { return; }
+      if (action.origin !== location.origin) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      window.__nexloriPendingForm = form;
+      window.__nexloriPendingSubmitter = event.submitter || null;
+      window.__nexloriResumePendingLogin = function () {
+        const pending = window.__nexloriPendingForm;
+        const submitter = window.__nexloriPendingSubmitter;
+        window.__nexloriPendingForm = null;
+        window.__nexloriPendingSubmitter = null;
+        window.__nexloriResumePendingLogin = null;
+        if (!pending) return;
+        window.__nexloriBypassLoginCapture = true;
+        try {
+          if (submitter && submitter.form === pending) pending.requestSubmit(submitter);
+          else pending.requestSubmit();
+        } catch (_) {
+          pending.submit();
+        }
+      };
+      bridge.offerCredentials(String(userField.value).slice(0, 1024), String(passwordField.value).slice(0, 4096));
+    }, true);
+  });
+})();
+"""
+        script = QWebEngineScript()
+        script.setName("NexloriPasswordSavePrompt")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setRunsOnSubFrames(False)
+        script.setSourceCode(channel_source + "\n" + watcher)
+        scripts.insert(script)
+        self._password_capture_script = script
 
     def _refresh_page_theme_script(self) -> None:
         """Apply the selected stylesheet automatically to each newly created page document."""
@@ -1112,6 +1191,12 @@ QPushButton:disabled {{ color:{muted}; }}
         view = QWebEngineView(self.tabs.stack)
         page = BrowserPage(self.profile, self, view)
         view.setPage(page)
+        channel = QWebChannel(page)
+        credential_bridge = CredentialCaptureBridge(self, view)
+        channel.registerObject("nexloriCredentials", credential_bridge)
+        page.setWebChannel(channel)
+        view._nexlori_webchannel = channel
+        view._nexlori_credential_bridge = credential_bridge
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.AutoLoadImages, True)
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
@@ -1137,7 +1222,7 @@ QPushButton:disabled {{ color:{muted}; }}
             self.tabs.setCurrentIndex(index)
         if start_page:
             view._nexlori_start = True
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
         elif url:
             view._nexlori_start = False
             view.setUrl(QUrl(url))
@@ -1307,12 +1392,12 @@ QPushButton:disabled {{ color:{muted}; }}
                 and getattr(view, "_nexlori_start", False)
                 and view.url().toString() == "about:blank"
             ):
-                view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+                view.setHtml(self._render_start_page(), QUrl("about:blank"))
 
     def navigate_view(self, view: QWebEngineView, url: str) -> None:
         if url.lower() in {"about:start", "nexlori:start"}:
             view._nexlori_start = True
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
             return
         view._nexlori_start = False
         view._nexlori_internal = None
@@ -1335,7 +1420,7 @@ QPushButton:disabled {{ color:{muted}; }}
         if getattr(view, "_nexlori_internal", None) and view.url().toString() == "about:blank":
             self._show_internal_page(view, view._nexlori_internal)
         elif getattr(view, "_nexlori_start", False) and view.url().toString() == "about:blank":
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
         else:
             view.reload()
 
@@ -1344,7 +1429,7 @@ QPushButton:disabled {{ color:{muted}; }}
         if view:
             view._nexlori_start = True
             view._nexlori_internal = None
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
             index = self.tabs.indexOf(view)
             if index >= 0:
                 self.tabs.setTabText(index, "Nexlori · Startseite")
@@ -1453,6 +1538,7 @@ QPushButton:disabled {{ color:{muted}; }}
             message = "Lesezeichen gespeichert"
         self._save_bookmarks()
         self._refresh_suggestions()
+        self._refresh_open_start_pages()
         self._update_bookmark_button()
         self.statusBar().showMessage(message, 2200)
 
@@ -1684,6 +1770,9 @@ QPushButton:disabled {{ color:{muted}; }}
         updates.setChecked(self.settings.auto_update_check)
         popups = QCheckBox("Website-Pop-ups und neue Fenster erlauben", dialog)
         popups.setChecked(self.settings.allow_web_popups)
+        background = QCheckBox("Beim Schließen in den Infobereich minimieren (Nexlori bleibt aktiv)", dialog)
+        background.setChecked(self.settings.background_on_close)
+        background.setToolTip("Klicke im Nexlori-Symbol im Infobereich auf „Beenden“, um den Browser vollständig zu schließen.")
 
         zoom = QDoubleSpinBox(dialog)
         zoom.setRange(0.5, 3.0)
@@ -1722,6 +1811,7 @@ QPushButton:disabled {{ color:{muted}; }}
         form.addRow("Werbe- und Trackerschutz", ubol)
         form.addRow("Updates", updates)
         form.addRow("Pop-ups", popups)
+        form.addRow("Hintergrundbetrieb", background)
         form.addRow("Standard-Zoom", zoom)
         form.addRow("Suchmaschine", search_engine)
         root.addLayout(form)
@@ -1756,6 +1846,7 @@ QPushButton:disabled {{ color:{muted}; }}
         self.settings.auto_update_check = updates.isChecked()
         self.settings.memory_saver = memory_saver.isChecked()
         self.settings.allow_web_popups = popups.isChecked()
+        self.settings.background_on_close = background.isChecked()
         self.settings.page_zoom = float(zoom.value())
         self.settings.search_url = canonical_search_url(str(search_engine.currentData()))
         self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
@@ -1803,6 +1894,51 @@ QPushButton:disabled {{ color:{muted}; }}
             )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Standardbrowser", f"Nexlori konnte nicht registriert werden: {exc}")
+
+    def _offer_save_credentials(self, view: QWebEngineView, username: str, password: str) -> None:
+        """Ask before saving a password submitted through a secure, same-origin login form."""
+        if self._credential_prompt_open or self.tabs.indexOf(view) < 0:
+            self._resume_pending_login(view)
+            return
+        current = view.url()
+        if current.scheme().lower() != "https" or not current.host() or not username.strip() or not password:
+            self._resume_pending_login(view)
+            return
+        self._credential_prompt_open = True
+        site = f"{current.scheme()}://{current.host()}"
+        try:
+            answer = QMessageBox.question(
+                self, "Passwort sichern?",
+                f"Nexlori hat eine Anmeldung bei {current.host()} erkannt.\n\n"
+                "Möchtest du Benutzername und Passwort in deinem verschlüsselten lokalen Tresor speichern?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                from .password_vault_ui import save_login_credentials
+                saved = save_login_credentials(
+                    self, self.settings_path.parent / "password-vault.json",
+                    site=site, username=username[:1024], password=password[:4096],
+                )
+                if saved:
+                    self.statusBar().showMessage("Anmeldedaten wurden verschlüsselt gespeichert.", 4000)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Passwort-Tresor", f"Anmeldedaten konnten nicht gespeichert werden: {exc}")
+        finally:
+            self._credential_prompt_open = False
+            self._resume_pending_login(view)
+
+    def _resume_pending_login(self, view: QWebEngineView) -> None:
+        """Continue the form submit after the save prompt, whether the user saves or skips."""
+        if self.tabs.indexOf(view) < 0:
+            return
+        try:
+            view.page().runJavaScript(
+                "if (typeof window.__nexloriResumePendingLogin === 'function') "
+                "window.__nexloriResumePendingLogin();"
+            )
+        except RuntimeError:
+            pass
 
     def show_spotify_popup(self) -> None:
         try:
@@ -1899,6 +2035,109 @@ QPushButton:disabled {{ color:{muted}; }}
             QMessageBox.information(self, "Nexlori-Update", "Update verifiziert. Nexlori wird geschlossen, aktualisiert und anschließend neu gestartet.")
             self.close()
             QApplication.quit()
+
+    def show_developer_tools(self) -> None:
+        """Open Chromium DevTools for the active tab: Elements, Console, Network and Performance."""
+        view = self.current_view()
+        if view is None:
+            return
+        if self._devtools_window is not None and self._devtools_window.isVisible():
+            self._devtools_window.hide()
+            return
+        if self._devtools_window is None:
+            window = QMainWindow(self, Qt.WindowType.Window)
+            window.setWindowTitle("Nexlori · Entwicklerwerkzeuge")
+            window.resize(1050, 720)
+            dev_view = QWebEngineView(window)
+            dev_page = QWebEnginePage(self.profile, dev_view)
+            dev_view.setPage(dev_page)
+            window.setCentralWidget(dev_view)
+            self._devtools_window = window
+            self._devtools_view = dev_view
+        try:
+            view.page().setDevToolsPage(self._devtools_view.page())
+            self._devtools_window.setWindowTitle(
+                f"Nexlori · Entwicklerwerkzeuge — {view.title() or view.url().host() or 'Tab'}"
+            )
+            self._devtools_window.show()
+            self._devtools_window.raise_()
+            self._devtools_window.activateWindow()
+        except (AttributeError, RuntimeError) as exc:
+            QMessageBox.warning(self, "Entwicklerwerkzeuge", f"DevTools konnten nicht geöffnet werden: {exc}")
+
+    def show_browser_information(self) -> None:
+        """Show useful runtime, profile, renderer and page diagnostics without secrets."""
+        view = self.current_view()
+        page = view.page() if view else None
+        user_agent = self.profile.httpUserAgent()
+        match = re.search(r"(?:Chrome|Chromium)/([^\s]+)", user_agent)
+        try:
+            process_id = (
+                str(page.renderProcessPid())
+                if page is not None and hasattr(page, "renderProcessPid")
+                else "nicht verfügbar"
+            )
+        except (RuntimeError, TypeError):
+            process_id = "nicht verfügbar"
+        if view:
+            page_url = view.url()
+            if page_url.scheme().lower() in {"http", "https"}:
+                current_url = f"{page_url.scheme()}://{page_url.host()}"
+                explicit_port = page_url.port(-1)
+                if explicit_port >= 0:
+                    current_url += f":{explicit_port}"
+                current_url += page_url.path()
+            else:
+                # Diagnostic exports omit query strings and fragments, which can contain session tokens.
+                current_url = page_url.toString().split("?", 1)[0].split("#", 1)[0]
+        else:
+            current_url = "—"
+        current_title = view.title() if view else "—"
+        info = (
+            f"Nexlori: {APP_VERSION}\n"
+            f"Qt: {qVersion()}\nPySide6: {PYSIDE_VERSION}\nPython: {platform.python_version()}\n"
+            f"Betriebssystem: {platform.platform()}\nArchitektur: {platform.machine()}\n"
+            f"Chromium aus User-Agent: {match.group(1) if match else 'nicht eindeutig erkannt'}\n"
+            f"Renderer-Prozess-ID: {process_id}\nTabs geöffnet: {self.tabs.count()}\n"
+            f"Aktueller Titel: {current_title}\nAktuelle URL: {current_url}\n"
+            f"Profilordner: {self.storage_dir}\nCache-Ordner: {self.cache_dir}\n"
+            f"Einstellungen: {self.settings_path}\nLesezeichen: {len(self.bookmarks)}\n"
+            f"uBlock Origin Lite aktiviert: {'Ja' if self.settings.ubol_enabled else 'Nein'}\n"
+            f"Speichersparmodus: {'Ja' if self.settings.memory_saver else 'Nein'}\n"
+            f"Hintergrundbetrieb beim Schließen: {'Ja' if self.settings.background_on_close else 'Nein'}\n"
+            f"User-Agent: {user_agent}\n"
+        )
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nexlori · Browser-Diagnose")
+        dialog.resize(760, 560)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            "Technische Informationen für die Fehlersuche. Passwörter und Inhalte des Tresors werden nicht angezeigt.",
+            dialog,
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        text = QPlainTextEdit(dialog)
+        text.setReadOnly(True)
+        text.setPlainText(info)
+        layout.addWidget(text, 1)
+        actions = QHBoxLayout()
+        copy_button = QPushButton("Informationen kopieren", dialog)
+        copy_button.clicked.connect(lambda: QApplication.clipboard().setText(info))
+        folder_button = QPushButton("Datenordner öffnen", dialog)
+        folder_button.clicked.connect(self.open_data_folder)
+        close_button = QPushButton("Schließen", dialog)
+        close_button.clicked.connect(dialog.accept)
+        actions.addWidget(copy_button)
+        actions.addWidget(folder_button)
+        actions.addStretch(1)
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+        dialog.exec()
+
+    def open_data_folder(self) -> None:
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.settings_path.parent)))
 
     def show_about(self) -> None:
         QMessageBox.about(
@@ -2251,9 +2490,32 @@ QPushButton:disabled {{ color:{muted}; }}
                 view.deleteLater()
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        if (
+            not self._force_exit
+            and self.settings.background_on_close
+            and self.tray_icon is not None
+            and self.tray_icon.isVisible()
+        ):
+            event.ignore()
+            self.hide()
+            if self._devtools_window is not None:
+                self._devtools_window.hide()
+            if self._spotify_popup is not None:
+                self._spotify_popup.hide()
+            self.tray_icon.showMessage(
+                "Nexlori läuft im Hintergrund",
+                "Klicke auf das Nexlori-Symbol im Infobereich, um den Browser zu öffnen oder zu beenden.",
+                QSystemTrayIcon.MessageIcon.Information,
+                3000,
+            )
+            return
         self._closing = True
         self._sleep_timer.stop()
         self.accent_line.pause(True)
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
+        if self._devtools_window is not None:
+            self._devtools_window.close()
         self._save_settings()
         self._save_bookmarks()
         self._release_web_views()
