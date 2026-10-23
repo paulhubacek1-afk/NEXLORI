@@ -496,6 +496,46 @@ class NexloriWindow(QMainWindow):
         """Build the start page with the latest saved bookmarks."""
         return _start_page(self.theme, self.settings.search_url, bookmarks=self.bookmarks)
 
+    def _setup_tray(self) -> None:
+        """Keep Nexlori available from the Windows notification area while its window is hidden."""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray_icon = None
+            return
+        tray = QSystemTrayIcon(self.windowIcon(), self)
+        tray.setToolTip(f"Nexlori {APP_VERSION}")
+        menu = QMenu(self)
+        menu.addAction("Nexlori öffnen", self._show_from_tray)
+        menu.addAction("Neuer Tab", lambda: (self._show_from_tray(), self.new_tab()))
+        menu.addSeparator()
+        menu.addAction("Entwicklerwerkzeuge", self.show_developer_tools)
+        menu.addAction("Browser-Informationen", self.show_browser_information)
+        menu.addSeparator()
+        menu.addAction("Beenden", self.quit_application)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._tray_activated)
+        self.tray_icon = tray
+        tray.show()
+
+    def _tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._show_from_tray()
+
+    def _show_from_tray(self) -> None:
+        self.showNormal() if self.isMinimized() else self.show()
+        self.raise_()
+        self.activateWindow()
+        view = self.current_view()
+        if view is not None:
+            view.setFocus()
+
+    def quit_application(self) -> None:
+        """Explicit tray-menu exit bypasses close-to-tray and stops the application."""
+        self._force_exit = True
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
+        self.close()
+        QApplication.quit()
+
     def _build_ui(self) -> None:
         root = QWidget(self)
         outer = QVBoxLayout(root)
@@ -1139,6 +1179,84 @@ QPushButton:disabled {{ color:{muted}; }}
     def _build_page_theme_script(self, enabled: bool) -> str:
         return build_page_theme_script(self.theme, enabled)
 
+    def _refresh_password_capture_script(self) -> None:
+        """Install a form-submit watcher only on secure top-level pages."""
+        scripts = self.profile.scripts()
+        existing = getattr(self, "_password_capture_script", None)
+        if existing is not None:
+            try:
+                scripts.remove(existing)
+            except (RuntimeError, TypeError):
+                pass
+        resource = QFile(":/qtwebchannel/qwebchannel.js")
+        if not resource.open(QIODevice.OpenModeFlag.ReadOnly):
+            self._password_capture_script = None
+            return
+        try:
+            channel_source = bytes(resource.readAll()).decode("utf-8", errors="replace")
+        finally:
+            resource.close()
+        watcher = r"""
+(function () {
+  if (location.protocol !== "https:" || window.__nexloriPasswordCaptureInstalled) return;
+  window.__nexloriPasswordCaptureInstalled = true;
+  if (typeof QWebChannel !== "function" || !window.qt || !qt.webChannelTransport) return;
+  new QWebChannel(qt.webChannelTransport, function (channel) {
+    const bridge = channel.objects.nexloriCredentials;
+    if (!bridge || typeof bridge.offerCredentials !== "function") return;
+    document.addEventListener("submit", function (event) {
+      if (window.__nexloriBypassLoginCapture) {
+        window.__nexloriBypassLoginCapture = false;
+        return;
+      }
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      const passwordField = form.querySelector('input[type="password"]');
+      if (!passwordField || !passwordField.value) return;
+      const userFields = Array.from(form.querySelectorAll(
+        'input[autocomplete="username"], input[type="email"], input[name*="user" i], ' +
+        'input[id*="user" i], input[name*="login" i], input[id*="login" i], ' +
+        'input[name*="email" i], input[id*="email" i], input[type="text"]'
+      ));
+      const userField = userFields.find(function (field) {
+        return field !== passwordField && field.value && field.value.trim();
+      });
+      if (!userField) return;
+      let action;
+      try { action = new URL(form.action || location.href, location.href); } catch (_) { return; }
+      if (action.origin !== location.origin) return;
+      event.preventDefault();
+      window.__nexloriPendingForm = form;
+      window.__nexloriPendingSubmitter = event.submitter || null;
+      window.__nexloriResumePendingLogin = function () {
+        const pending = window.__nexloriPendingForm;
+        const submitter = window.__nexloriPendingSubmitter;
+        window.__nexloriPendingForm = null;
+        window.__nexloriPendingSubmitter = null;
+        window.__nexloriResumePendingLogin = null;
+        if (!pending) return;
+        window.__nexloriBypassLoginCapture = true;
+        try {
+          if (submitter && submitter.form === pending) pending.requestSubmit(submitter);
+          else pending.requestSubmit();
+        } catch (_) {
+          pending.submit();
+        }
+      };
+      bridge.offerCredentials(String(userField.value).slice(0, 1024), String(passwordField.value).slice(0, 4096));
+    }, true);
+  });
+})();
+"""
+        script = QWebEngineScript()
+        script.setName("NexloriPasswordSavePrompt")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setRunsOnSubFrames(False)
+        script.setSourceCode(channel_source + "\n" + watcher)
+        scripts.insert(script)
+        self._password_capture_script = script
+
     def _refresh_page_theme_script(self) -> None:
         """Apply the selected stylesheet automatically to each newly created page document."""
         scripts = self.profile.scripts()
@@ -1762,6 +1880,9 @@ QPushButton:disabled {{ color:{muted}; }}
         updates.setChecked(self.settings.auto_update_check)
         popups = QCheckBox("Website-Pop-ups und neue Fenster erlauben", dialog)
         popups.setChecked(self.settings.allow_web_popups)
+        background = QCheckBox("Beim Schließen in den Infobereich minimieren (Nexlori bleibt aktiv)", dialog)
+        background.setChecked(self.settings.background_on_close)
+        background.setToolTip("Klicke im Nexlori-Symbol im Infobereich auf „Beenden“, um den Browser vollständig zu schließen.")
 
         zoom = QDoubleSpinBox(dialog)
         zoom.setRange(0.5, 3.0)
@@ -1800,6 +1921,7 @@ QPushButton:disabled {{ color:{muted}; }}
         form.addRow("Werbe- und Trackerschutz", ubol)
         form.addRow("Updates", updates)
         form.addRow("Pop-ups", popups)
+        form.addRow("Hintergrundbetrieb", background)
         form.addRow("Standard-Zoom", zoom)
         form.addRow("Suchmaschine", search_engine)
         root.addLayout(form)
@@ -1834,6 +1956,7 @@ QPushButton:disabled {{ color:{muted}; }}
         self.settings.auto_update_check = updates.isChecked()
         self.settings.memory_saver = memory_saver.isChecked()
         self.settings.allow_web_popups = popups.isChecked()
+        self.settings.background_on_close = background.isChecked()
         self.settings.page_zoom = float(zoom.value())
         self.settings.search_url = canonical_search_url(str(search_engine.currentData()))
         self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
