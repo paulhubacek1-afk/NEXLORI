@@ -1,5 +1,20 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.3.0 – Startseite, Hintergrundbetrieb und Entwicklerwerkzeuge
+
+### Neu und verbessert
+- Lesezeichen werden direkt unter dem Suchfeld auf der Startseite als anklickbare Schnellzugriffe angezeigt.
+- Die Startseite verlinkt auf Bühne Total, MembersPlugin, das Kartenbuchungsprogramm, Lunares, ShareZone Self-hosted und Nexlori auf GitHub.
+- F12 öffnet Chromium-Entwicklerwerkzeuge. Ein Diagnosefenster zeigt Browser-, Chromium-, Python-, Qt-, Geräte-, Profil- und Tab-Informationen, ohne Tresorpasswörter auszugeben.
+- Nexlori kann beim Schließen im Windows-Infobereich weiterlaufen. Das Tray-Menü öffnet den Browser wieder und enthält einen eigenen Befehl zum vollständigen Beenden; die Funktion ist abschaltbar.
+- Bei erkannten Anmeldungen über HTTPS fragt Nexlori, ob die Zugangsdaten in den lokal verschlüsselten Tresor gespeichert werden sollen. Ohne Zustimmung werden sie nicht gespeichert; automatisches Ausfüllen ist weiterhin deaktiviert.
+- Version auf 1.3.0 angehoben und Einstellungen für den Hintergrundbetrieb ergänzt.
+
+### Behoben und geprüft
+- Startseiten-Lesezeichen werden nach dem Hinzufügen oder Entfernen unmittelbar aktualisiert.
+- Browser-Diagnose erkennt die Chromium-Version aus dem User-Agent.
+
+## 1.2.0 – Browser-Update, Audio, Speicher und Theme-Packs
 ## 1.2.0 – Browser-Update, Audio, Speicher und Theme-Packs
 
 ### Neu und verbessert
