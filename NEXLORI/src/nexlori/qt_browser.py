@@ -1098,8 +1098,10 @@ QPushButton:disabled {{ color:{muted}; }}
       }
       const form = event.target;
       if (!(form instanceof HTMLFormElement)) return;
-      const passwordField = form.querySelector('input[type="password"]');
-      if (!passwordField || !passwordField.value) return;
+      const passwordFields = Array.from(form.querySelectorAll('input[type="password"]'));
+      if (passwordFields.length !== 1) return;
+      const passwordField = passwordFields[0];
+      if (!passwordField.value) return;
       const userFields = Array.from(form.querySelectorAll(
         'input[autocomplete="username"], input[type="email"], input[name*="user" i], ' +
         'input[id*="user" i], input[name*="login" i], input[id*="login" i], ' +
@@ -1113,6 +1115,7 @@ QPushButton:disabled {{ color:{muted}; }}
       try { action = new URL(form.action || location.href, location.href); } catch (_) { return; }
       if (action.origin !== location.origin) return;
       event.preventDefault();
+      event.stopImmediatePropagation();
       window.__nexloriPendingForm = form;
       window.__nexloriPendingSubmitter = event.submitter || null;
       window.__nexloriResumePendingLogin = function () {
