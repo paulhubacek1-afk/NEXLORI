@@ -363,6 +363,19 @@ class UpdateWorker(QThread):
             self.result_data["error"] = str(exc)
 
 
+class CredentialCaptureBridge(QObject):
+    """Small page-scoped bridge used only after a secure login form is submitted."""
+
+    def __init__(self, owner: "NexloriWindow", view: QWebEngineView):
+        super().__init__(view)
+        self.owner = owner
+        self.view = view
+
+    @Slot(str, str)
+    def offerCredentials(self, username: str, password: str) -> None:  # noqa: N802
+        self.owner._offer_save_credentials(self.view, str(username), str(password))
+
+
 class BrowserPage(QWebEnginePage):
     def __init__(self, profile: QWebEngineProfile, owner: "NexloriWindow", parent: QWidget):
         super().__init__(profile, parent)
@@ -431,6 +444,11 @@ class NexloriWindow(QMainWindow):
         self.bookmarks_path = settings_path.parent / "bookmarks.json"
         self.bookmarks = self._load_bookmarks()
         self._closing = False
+        self._force_exit = False
+        self._credential_prompt_open = False
+        self._devtools_window = None
+        self._devtools_view = None
+        self.tray_icon: QSystemTrayIcon | None = None
         self._self_test = self_test
         self._update_worker: UpdateWorker | None = None
         self._silent_update_check = True
@@ -449,6 +467,7 @@ class NexloriWindow(QMainWindow):
         self._page_theme_script = None
         self._refresh_page_theme_script()
         self._refresh_addons_script()
+        self._refresh_password_capture_script()
         try:
             self.extension_manager = self.profile.extensionManager()
             self.extension_manager.installFinished.connect(self._on_extension_installed)
@@ -461,6 +480,7 @@ class NexloriWindow(QMainWindow):
         self.resize(1240, 820)
         self.setMinimumSize(760, 480)
         self._build_ui()
+        self._setup_tray()
         self._apply_browser_theme()
         self._bind_shortcuts()
         self._start_tab_sleep_timer()
@@ -471,6 +491,10 @@ class NexloriWindow(QMainWindow):
         QTimer.singleShot(3200, self._ensure_default_extension)
         if self.settings.auto_update_check:
             QTimer.singleShot(10000, self._start_silent_update_check)
+
+    def _render_start_page(self) -> str:
+        """Build the start page with the latest saved bookmarks."""
+        return _start_page(self.theme, self.settings.search_url, bookmarks=self.bookmarks)
 
     def _build_ui(self) -> None:
         root = QWidget(self)
@@ -767,7 +791,7 @@ class NexloriWindow(QMainWindow):
                 view.page().setBackgroundColor(self._qt_color(self.theme.bg))
                 self.apply_page_theme(view)
                 if getattr(view, '_nexlori_start', False):
-                    view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl('about:blank'))
+                    view.setHtml(self._render_start_page(), QUrl('about:blank'))
         self.statusBar().showMessage(f"Themes kombiniert: {self.theme.label}", 3500)
 
     def edit_pride_favorites(self) -> None:
@@ -925,6 +949,10 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
         self.more_menu.addAction("Nexlori-Add-ons …", self.show_addons_center)
         self.tools_menu = self.more_menu.addMenu("Werkzeuge")
+        developer_menu = self.more_menu.addMenu("Entwickler")
+        developer_menu.addAction("Entwicklerwerkzeuge (F12)", self.show_developer_tools, QKeySequence("F12"))
+        developer_menu.addAction("Browser-Informationen", self.show_browser_information)
+        developer_menu.addAction("Nexlori-Datenordner öffnen", self.open_data_folder)
         self.more_menu.addAction("Theme-Shop …", self.show_theme_shop)
         self.more_menu.addAction("Als Standardbrowser festlegen …", self.set_as_default_browser)
         self.more_menu.addAction("Einstellungen", self.show_settings, QKeySequence("Ctrl+,"))
@@ -963,6 +991,7 @@ class NexloriWindow(QMainWindow):
             ("Ctrl+D", self.toggle_bookmark),
             ("Ctrl+Shift+M", self.show_spotify_popup),
             ("Ctrl+Shift+P", self.show_password_manager),
+            ("F12", self.show_developer_tools),
             ("Ctrl+,", self.show_settings),
             ("Ctrl+Plus", lambda: self.change_zoom(0.1)),
             ("Ctrl+Minus", lambda: self.change_zoom(-0.1)),
@@ -1097,7 +1126,7 @@ QPushButton:disabled {{ color:{muted}; }}
                 view.page().setBackgroundColor(self._qt_color(self.theme.bg))
                 self.apply_page_theme(view)
                 if getattr(view, "_nexlori_start", False):
-                    view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+                    view.setHtml(self._render_start_page(), QUrl("about:blank"))
                 elif getattr(view, "_nexlori_internal", None):
                     self._show_internal_page(view, view._nexlori_internal)
         self.statusBar().showMessage(f"Theme: {self.theme.label}", 2500)
@@ -1154,6 +1183,12 @@ QPushButton:disabled {{ color:{muted}; }}
         view = QWebEngineView(self.tabs.stack)
         page = BrowserPage(self.profile, self, view)
         view.setPage(page)
+        channel = QWebChannel(page)
+        credential_bridge = CredentialCaptureBridge(self, view)
+        channel.registerObject("nexloriCredentials", credential_bridge)
+        page.setWebChannel(channel)
+        view._nexlori_webchannel = channel
+        view._nexlori_credential_bridge = credential_bridge
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.AutoLoadImages, True)
         view.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
@@ -1179,7 +1214,7 @@ QPushButton:disabled {{ color:{muted}; }}
             self.tabs.setCurrentIndex(index)
         if start_page:
             view._nexlori_start = True
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
         elif url:
             view._nexlori_start = False
             view.setUrl(QUrl(url))
@@ -1349,12 +1384,12 @@ QPushButton:disabled {{ color:{muted}; }}
                 and getattr(view, "_nexlori_start", False)
                 and view.url().toString() == "about:blank"
             ):
-                view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+                view.setHtml(self._render_start_page(), QUrl("about:blank"))
 
     def navigate_view(self, view: QWebEngineView, url: str) -> None:
         if url.lower() in {"about:start", "nexlori:start"}:
             view._nexlori_start = True
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
             return
         view._nexlori_start = False
         view._nexlori_internal = None
@@ -1377,7 +1412,7 @@ QPushButton:disabled {{ color:{muted}; }}
         if getattr(view, "_nexlori_internal", None) and view.url().toString() == "about:blank":
             self._show_internal_page(view, view._nexlori_internal)
         elif getattr(view, "_nexlori_start", False) and view.url().toString() == "about:blank":
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
         else:
             view.reload()
 
@@ -1386,7 +1421,7 @@ QPushButton:disabled {{ color:{muted}; }}
         if view:
             view._nexlori_start = True
             view._nexlori_internal = None
-            view.setHtml(_start_page(self.theme, self.settings.search_url), QUrl("about:blank"))
+            view.setHtml(self._render_start_page(), QUrl("about:blank"))
             index = self.tabs.indexOf(view)
             if index >= 0:
                 self.tabs.setTabText(index, "Nexlori · Startseite")
@@ -1495,6 +1530,7 @@ QPushButton:disabled {{ color:{muted}; }}
             message = "Lesezeichen gespeichert"
         self._save_bookmarks()
         self._refresh_suggestions()
+        self._refresh_open_start_pages()
         self._update_bookmark_button()
         self.statusBar().showMessage(message, 2200)
 
