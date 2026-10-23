@@ -2180,7 +2180,7 @@ QPushButton:disabled {{ color:{muted}; }}
         view = self.current_view()
         page = view.page() if view else None
         user_agent = self.profile.httpUserAgent()
-        match = re.search(r"(?:Chrome|Chromium)/([^\\s]+)", user_agent)
+        match = re.search(r"(?:Chrome|Chromium)/([^\s]+)", user_agent)
         try:
             process_id = (
                 str(page.renderProcessPid())
