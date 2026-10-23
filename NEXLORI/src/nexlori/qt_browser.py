@@ -990,7 +990,7 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Nexlori-Add-ons …", self.show_addons_center)
         self.tools_menu = self.more_menu.addMenu("Werkzeuge")
         developer_menu = self.more_menu.addMenu("Entwickler")
-        developer_menu.addAction("Entwicklerwerkzeuge (F12)", self.show_developer_tools, QKeySequence("F12"))
+        developer_menu.addAction("Entwicklerwerkzeuge (F12)", self.show_developer_tools)
         developer_menu.addAction("Browser-Informationen", self.show_browser_information)
         developer_menu.addAction("Nexlori-Datenordner öffnen", self.open_data_folder)
         self.more_menu.addAction("Theme-Shop …", self.show_theme_shop)
