@@ -53,6 +53,7 @@ class Settings:
     memory_saver: bool = True  # entlädt inaktive Tabs, um RAM freizugeben
     ubol_enabled: bool = True
     allow_web_popups: bool = False
+    background_on_close: bool = True  # Schließen blendet ins Tray aus; Nexlori bleibt im Hintergrund aktiv
     block_nsfw: bool = True  # lokaler URL-Filter, standardmäßig aktiv
     extensions_enabled: dict[str, bool] = field(default_factory=lambda: {"ublock-origin-lite": True})
     animations: str = "full"  # "full" | "reduced" | "off"
@@ -104,7 +105,7 @@ class Settings:
             or any(icon not in valid_icons for icon in self.toolbar_visible_icons)
         ):
             out.append("toolbar_visible_icons: ungültige oder doppelte Icons")
-        for field_name in ("auto_update_check", "memory_saver", "ubol_enabled", "allow_web_popups", "block_nsfw"):
+        for field_name in ("auto_update_check", "memory_saver", "ubol_enabled", "allow_web_popups", "background_on_close", "block_nsfw"):
             if not isinstance(getattr(self, field_name), bool):
                 out.append(f"{field_name}: true oder false erwartet")
         if (
