@@ -2076,7 +2076,19 @@ QPushButton:disabled {{ color:{muted}; }}
             )
         except (RuntimeError, TypeError):
             process_id = "nicht verfügbar"
-        current_url = view.url().toString() if view else "—"
+        if view:
+            page_url = view.url()
+            if page_url.scheme().lower() in {"http", "https"}:
+                current_url = f"{page_url.scheme()}://{page_url.host()}"
+                explicit_port = page_url.port(-1)
+                if explicit_port >= 0:
+                    current_url += f":{explicit_port}"
+                current_url += page_url.path()
+            else:
+                # Diagnostic exports omit query strings and fragments, which can contain session tokens.
+                current_url = page_url.toString().split("?", 1)[0].split("#", 1)[0]
+        else:
+            current_url = "—"
         current_title = view.title() if view else "—"
         info = (
             f"Nexlori: {APP_VERSION}\n"
