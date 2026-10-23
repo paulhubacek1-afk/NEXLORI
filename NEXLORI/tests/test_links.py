@@ -1,7 +1,7 @@
 import re
 
 from nexlori.links import DISCORD_URL, PROJECT_LINKS
-from nexlori.qt_browser import _start_page
+from nexlori.start_page import build_start_page as _start_page
 from nexlori.web_safety import addons_page_html
 from nexlori.core.themes import BUILTIN_THEMES
 
