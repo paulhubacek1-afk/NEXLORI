@@ -7,15 +7,18 @@ from __future__ import annotations
 import io
 import json
 import os
+import platform
 import re
 import sys
 import time
+from html import escape as html_escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from PySide6 import __version__ as PYSIDE_VERSION
 from PySide6.QtCore import (
-    QEventLoop, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QStringListModel, QThread, QTimer, QUrl,
-    QUrlQuery, Qt, Signal,
+    QFile, QIODevice, QObject, QEventLoop, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect,
+    QStringListModel, QThread, QTimer, QUrl, QUrlQuery, Qt, Signal, Slot, qVersion,
 )
 from PySide6.QtGui import (
     QAction, QActionGroup, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut,
@@ -37,12 +40,14 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QGraphicsOpacityEffect,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
     QStatusBar,
     QTabWidget,
+    QSystemTrayIcon,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -56,6 +61,7 @@ from PySide6.QtWebEngineCore import (
     QWebEngineUrlRequestInterceptor,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebChannel import QWebChannel
 
 from . import __version__
 from .browser import normalize_input
@@ -68,7 +74,7 @@ from .core.themes import (
     BUILTIN_THEMES, Theme, all_themes, combine_themes, get_theme, installed_theme_names, is_known_theme,
     relative_luminance,
 )
-from .links import DISCORD_URL, FEEDBACK_EMAIL, REPOSITORY_URL
+from .links import DISCORD_URL, FEEDBACK_EMAIL, PROJECT_LINKS, REPOSITORY_URL
 from .tabstrip import TabStrip
 from .titlebar import DialogThemer, ResizeFrame, TitleBar, apply_native_titlebar_colors
 from .web_safety import addons_page_html, home_network_page_html, normalize_home_target
@@ -125,7 +131,12 @@ def _theme_gradient(theme: Theme) -> str:
     return "qlineargradient(x1:0, y1:0, x2:1, y2:0, " + ", ".join(stops) + ")"
 
 
-def _start_page(theme: Theme, search_url: str, pride_mode: bool = False) -> str:
+def _start_page(
+    theme: Theme,
+    search_url: str,
+    pride_mode: bool = False,
+    bookmarks: list[dict[str, str]] | None = None,
+) -> str:
     """A polished, theme-aware private start page; its animations never affect normal websites."""
     colors = ", ".join(theme.stripes or (theme.accent,))
     search_template = json.dumps(search_url, ensure_ascii=False)
@@ -144,6 +155,24 @@ def _start_page(theme: Theme, search_url: str, pride_mode: bool = False) -> str:
 @keyframes pride-drift { from { transform:translate3d(0,-2vh,0) scale(.92); } to { transform:translate3d(2vw,3vh,0) scale(1.08); } }
 """ if pride_mode else ""
     pride_pill = '<span class="pride-pill">✦ Pride colours in motion</span>' if pride_mode else ""
+    bookmark_items = []
+    for item in bookmarks or []:
+        url = str(item.get("url", "")).strip()
+        if not url.lower().startswith(("https://", "http://")):
+            continue
+        title = html_escape(str(item.get("title") or url)[:80])
+        safe_url = html_escape(url, quote=True)
+        bookmark_items.append(
+            f'<a class="bookmark-chip" href="{safe_url}" title="{safe_url}"><span class="bookmark-star">☆</span><span>{title}</span></a>'
+        )
+    bookmark_markup = "".join(bookmark_items) or '<div class="empty-bookmarks">Noch keine Lesezeichen. Speichere eine Seite mit ☆ in der Browserleiste.</div>'
+    project_markup = "".join(
+        f'<a class="project-card" href="{html_escape(str(project["url"]), quote=True)}" target="_self">'
+        f'<span class="project-icon">{html_escape(str(project.get("icon", "↗")))}</span>'
+        f'<strong>{html_escape(str(project["title"]))}</strong>'
+        f'<small>{html_escape(str(project.get("description", "")))}</small></a>'
+        for project in PROJECT_LINKS
+    )
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Nexlori · Startseite</title>
@@ -176,6 +205,18 @@ a.cta:hover {{ transform:translateY(-2px); box-shadow:0 10px 26px {theme.accent}
 .tile-icon {{ display:block; color:{theme.accent}; font-size:22px; margin-bottom:9px; }}
 small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
 .foot {{ font-size:12px; margin-top:28px; opacity:.56; }}
+.section-title {{ display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:17px; letter-spacing:-.02em; margin:0 0 12px; }}
+.bookmarks-section {{ margin:25px 0 28px; }}
+.bookmark-list {{ display:flex; flex-wrap:wrap; gap:9px; }}
+.bookmark-chip {{ display:inline-flex; align-items:center; gap:8px; max-width:100%; padding:9px 13px; background:{theme.surface}; color:{theme.fg}; border:1px solid {theme.surface}; border-radius:13px; text-decoration:none; font-size:13px; transition:transform .18s ease,border-color .18s ease; }}
+.bookmark-chip:hover {{ border-color:{theme.accent}; transform:translateY(-2px); }}
+.bookmark-star {{ color:{theme.accent}; font-size:16px; }}
+.empty-bookmarks {{ opacity:.65; font-size:13px; padding:8px 0; }}
+.projects-section {{ margin-top:29px; }}
+.project-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; }}
+.project-card {{ display:block; color:{theme.fg}; background:{theme.surface}; border:1px solid {theme.surface}; border-radius:16px; padding:16px; text-decoration:none; transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease; }}
+.project-card:hover {{ border-color:{theme.accent}; transform:translateY(-3px); box-shadow:0 10px 26px {theme.accent}18; }}
+.project-icon {{ display:block; color:{theme.accent}; font-size:22px; margin-bottom:9px; }}
 @keyframes page-enter {{ from {{ opacity:0; transform:translateY(9px); }} to {{ opacity:1; transform:translateY(0); }} }}
 @keyframes tile-enter {{ from {{ opacity:0; transform:translateY(10px); }} to {{ opacity:1; transform:translateY(0); }} }}
 @keyframes stripe-flow {{ from {{ background-position:0 0; }} to {{ background-position:100% 0; }} }}
@@ -184,6 +225,7 @@ small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
 </style></head><body>{pride_visuals}<main><div class="stripe"></div><span class="mark">NEXLORI / BROWSER</span>
 <h1>Das Web. Auf deine Art.</h1><p class="intro">Ein Browser, der sich deinem Stil anpasst – mit persönlicher Farbwelt, ruhiger Oberfläche und lokalem Schutz.</p>{pride_pill}
 <form class="bar" id="search"><input id="query" autocomplete="off" autofocus placeholder="Suchen oder Webadresse eingeben" aria-label="Suchen oder Webadresse eingeben"><button type="submit">Los ↗</button></form>
+<section class="bookmarks-section"><h2 class="section-title">Deine Lesezeichen</h2><div class="bookmark-list">{bookmark_markup}</div></section>
 <div class="community"><a class="cta" href="nexlori://community/discord" title="Nexlori-Community auf Discord">💬 Discord-Community beitreten</a></div>
 <div class="tiles">
 <a class="tile" href="https://www.wikipedia.org/"><span class="tile-icon">⌕</span><strong>Wissen</strong><small>Wikipedia</small></a>
@@ -192,7 +234,7 @@ small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
 <a class="tile" href="nexlori://addons"><span class="tile-icon">＋</span><strong>Add-ons</strong><small>Erweiterungen entdecken und verwalten</small></a>
 <a class="tile" href="nexlori://home-network"><span class="tile-icon">⌂</span><strong>Heimnetz</strong><small>Router, NAS, Drucker und Smart Home</small></a>
 <a class="tile" href="nexlori://settings"><span class="tile-icon">✦</span><strong>Dein Nexlori</strong><small>Themes, Suchmaschine und Einstellungen</small></a>
-</div><div class="foot">Nexlori · Chromium-WebEngine · Schutz und Einstellungen bleiben lokal.</div>
+</div><section class="projects-section"><h2 class="section-title">Meine Online-Projekte</h2><div class="project-grid">{project_markup}</div></section><div class="foot">Nexlori · Chromium-WebEngine · Schutz und Einstellungen bleiben lokal.</div>
 <script>
 const template = {search_template};
 document.getElementById('search').addEventListener('submit', function(e) {{
