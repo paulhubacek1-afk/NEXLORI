@@ -104,7 +104,7 @@ Die EXE ist nicht digital signiert. Windows kann deshalb beim ersten Start eine 
 
 | Bereich | Stand |
 |---|---|
-| Browserleiste | Zentrierte, abgerundete Adress-/Suchleiste, einstellbare Breite, Icon-Größe und Schnellzugriffe; Lesezeichenliste direkt unter der Startseiten-Suche; Links auf deine Online-Projekte |
+| Browserleiste | Zentrierte, abgerundete Adress-/Suchleiste, einstellbare Breite, Icon-Größe und Schnellzugriffe; Lesezeichenliste direkt unter der Startseiten-Suche; neutrale Startseite ohne Projektwerbung |
 | Tabs und Web | Tabs, Zurück/Vorwärts, Neu laden, Startseite, Lesezeichen, Verlauf, Seitensuche, Zoom und Download-Dialog auf Basis von Chromium |
 | Themes | Basis-, Gothic-, Cyberpunk-, Wald-, Ozean-, Sakura-, Kaffee- und Mitternacht-Themes plus 60 Pride-Farbwelten für häufige Flaggen aus Gender-, Sexualitäts-, Romantik- und Ace-Spektrum. Drei Pride-Favoriten sind direkt auswählbar. |
 | Website-Farben | Das lokale Theme-CSS wird bei jedem neuen Dokument bei DOM-Ready angewendet. Es bleibt optional und lässt sich in den Einstellungen abschalten; Webseiten können bestimmte Stile weiterhin selbst überschreiben. |
