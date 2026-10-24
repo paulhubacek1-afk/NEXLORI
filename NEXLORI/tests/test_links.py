@@ -16,9 +16,8 @@ def test_addons_page_links_builtin_addons():
     assert "nexlori://addons/builtin" in page and "nexlori://addons/install-zip" in page
 
 
-def test_project_links_are_https_and_labeled():
-    assert len(PROJECT_LINKS) >= 5
-    assert all(item["url"].startswith("https://") and item["title"] for item in PROJECT_LINKS)
+def test_external_project_links_are_removed():
+    assert PROJECT_LINKS == ()
 
 
 def test_start_page_shows_bookmarks_below_search_and_escapes_titles():
@@ -32,4 +31,9 @@ def test_start_page_shows_bookmarks_below_search_and_escapes_titles():
     assert 'href="https://example.com"' in html
     assert "&lt;script&gt;example&lt;/script&gt;" in html
     assert "<script>example</script>" not in html
-    assert "Meine Online-Projekte" in html
+    assert "Meine Online-Projekte" not in html
+    assert "Bühne Total" not in html
+    assert "MembersPlugin" not in html
+    assert "Buchungsprogramm" not in html
+    assert "Lunares" not in html
+    assert "ShareZone" not in html
