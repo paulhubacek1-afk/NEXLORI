@@ -253,6 +253,34 @@ _THEMES = [
           ("#2745A1", "#78A8FF", "#A9D7FF")),
     Theme("peach", "Pfirsich", "#281A16", "#3B2922", "#FFF4EC", "#FFBC93",
           ("#FFBC93", "#FF8F9C", "#FFE0B5")),
+    # Neu in 1.4: helle Looks
+    Theme("papier", "Papier", "#FBF8F1", "#F1EBDD", "#2A2620", "#9A4A16", ("#E8D9BC", "#C9A26B", "#9A4A16")),
+    Theme("himmelblau", "Himmelblau", "#F4F8FD", "#E3EDF8", "#14243A", "#1F5FBF", ("#BFD8F5", "#6FA3E6", "#1F5FBF")),
+    Theme("salbei", "Salbei", "#F3F6F1", "#E2EADF", "#1E2A1F", "#2F6B3A", ("#C9DCC2", "#7FA878", "#2F6B3A")),
+    Theme("flieder", "Flieder", "#F8F5FC", "#ECE5F6", "#2A2238", "#6B3FB0", ("#DCCDF2", "#A98AD9", "#6B3FB0")),
+    Theme("duene", "Düne", "#FAF4EA", "#EFE3CF", "#33281A", "#8C5A12", ("#F2D8A7", "#D9A75A", "#8C5A12")),
+    Theme("kirschbluete", "Kirschblüte", "#FDF5F7", "#F6E3E8", "#3A1F27", "#B0305A", ("#F7C6D4", "#E8799B", "#B0305A")),
+    Theme("polarlicht-hell", "Polarlicht hell", "#ECEFF4", "#E0E5EE", "#2E3440", "#3B6EA8",
+          ("#8FBCBB", "#88C0D0", "#5E81AC")),
+    # Neu in 1.4: dunkle Looks
+    Theme("fjord", "Fjord", "#2E3440", "#3B4252", "#ECEFF4", "#88C0D0", ("#5E81AC", "#81A1C1", "#88C0D0", "#8FBCBB")),
+    Theme("nachtfalter", "Nachtfalter", "#282A36", "#343746", "#F8F8F2", "#BD93F9",
+          ("#FF79C6", "#BD93F9", "#8BE9FD", "#50FA7B")),
+    Theme("petrol", "Petrol", "#002B36", "#073642", "#EEE8D5", "#4FC3B8", ("#268BD2", "#2AA198", "#859900")),
+    Theme("terminal", "Terminal", "#0A0F0A", "#111A11", "#C8F7C5", "#39FF14", ("#0F3D0F", "#1F7A1F", "#39FF14")),
+    Theme("retrowelle", "Retrowelle", "#1A1033", "#2A1B4D", "#FDF0FF", "#FF7AC6",
+          ("#FF7AC6", "#B967FF", "#05FFA1", "#01CDFE")),
+    Theme("vulkan", "Vulkan", "#1A0E0B", "#2C1611", "#FFEDE5", "#FF6B35", ("#7A1F0F", "#D93A17", "#FF6B35", "#FFB347")),
+    Theme("tiefsee", "Tiefsee", "#04141F", "#0B2536", "#E2F4FF", "#3FD0C9", ("#06324D", "#0E6B8C", "#3FD0C9")),
+    Theme("herbstlaub", "Herbstlaub", "#1F140C", "#332213", "#FFF1E0", "#E9A23B",
+          ("#8C2F1B", "#C8551E", "#E9A23B", "#F3D27A")),
+    Theme("matcha", "Matcha", "#141A12", "#222B1E", "#EEF5E8", "#A8D672", ("#4E6B3A", "#7FA650", "#A8D672")),
+    Theme("oled", "OLED-Schwarz", "#000000", "#0D0D0D", "#F2F2F2", "#7AA2FF"),
+    Theme("bernstein", "Bernstein", "#1B1408", "#2C2110", "#FFF4DD", "#FFB000", ("#8A5A00", "#D98E04", "#FFB000")),
+    Theme("sternennebel", "Sternennebel", "#0B0820", "#17123A", "#EEEAFF", "#8F7CFF",
+          ("#3A2F8F", "#8F7CFF", "#E07CFF", "#7CD6FF")),
+    Theme("abendrot", "Abendrot", "#1E1020", "#311A33", "#FFF0F3", "#FF8A5C",
+          ("#FF5E62", "#FF8A5C", "#FFC371", "#C86DD7")),
 ]
 BUILTIN_THEMES: dict[str, Theme] = {t.name: t for t in _THEMES}
 
@@ -266,6 +294,10 @@ def all_themes() -> dict[str, Theme]:
     for name, theme in _INSTALLED_THEMES.items():
         merged.setdefault(name, theme)
     return merged
+
+
+def is_light_theme(theme: Theme) -> bool:
+    return relative_luminance(theme.bg) >= 0.5
 
 
 def get_theme(name: str) -> Theme | None:

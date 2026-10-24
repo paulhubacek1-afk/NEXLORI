@@ -16,6 +16,9 @@ from typing import Any
 
 REPOSITORY = "paulhubacek1-afk/NEXLORI"
 RELEASES_API = f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=100"
+RELEASES_PAGE = f"https://github.com/{REPOSITORY}/releases"
+PENDING_MANIFEST = "pending-update.json"
+PERIODIC_CHECK_SECONDS = 6 * 3600
 MAX_EXE_BYTES = 400 * 1024 * 1024
 VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+]build[.-](\d+))?$", re.IGNORECASE)
 HASH_PATTERN = re.compile(r"^\s*([0-9a-fA-F]{64})\s+Nexlori\.exe\s*$", re.MULTILINE)
@@ -157,11 +160,7 @@ def download_verified_update(release: dict[str, Any], destination_dir: str | Pat
         expected = match.group(1).lower()
         downloaded = temp_dir / "Nexlori.exe"
         _download(str(exe_url), downloaded)
-        digest = hashlib.sha256()
-        with downloaded.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        actual = digest.hexdigest()
+        actual = _sha256_file(downloaded)
         if not hmac.compare_digest(actual, expected):
             raise UpdateError("Die Prüfsumme passt nicht zur EXE. Das Update wurde verworfen.")
         staged = destination / "Nexlori.exe.pending"
@@ -170,7 +169,120 @@ def download_verified_update(release: dict[str, Any], destination_dir: str | Pat
     if staged.stat().st_size < 1024 * 1024:
         staged.unlink(missing_ok=True)
         raise UpdateError("Die EXE ist unerwartet klein. Das Update wurde verworfen.")
+    version = str(release.get("version") or str(release.get("tag_name", "")).removeprefix("v"))
+    _write_manifest(destination, {
+        "version": version,
+        "sha256": expected,
+        "file": staged.name,
+        "url": str(release.get("url") or release.get("html_url") or RELEASES_PAGE),
+    })
     return staged
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_manifest(directory: Path, data: dict[str, str]) -> None:
+    path = directory / PENDING_MANIFEST
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def discard_pending_update(update_dir: str | Path) -> None:
+    directory = Path(update_dir)
+    (directory / PENDING_MANIFEST).unlink(missing_ok=True)
+    (directory / "Nexlori.exe.pending").unlink(missing_ok=True)
+
+
+def pending_update(update_dir: str | Path, current_version: str) -> dict[str, str] | None:
+    """Return a verified, still-newer staged update or clean up stale leftovers.
+
+    The staged EXE is hashed again, so a file that changed on disk after the
+    download is never installed.
+    """
+    directory = Path(update_dir)
+    manifest = directory / PENDING_MANIFEST
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        (directory / "Nexlori.exe.pending").unlink(missing_ok=True)
+        return None
+    try:
+        staged = directory / str(data["file"])
+        newer = version_tuple(str(data["version"])) > version_tuple(current_version)
+        expected = str(data["sha256"]).lower()
+    except (KeyError, TypeError, ValueError):
+        discard_pending_update(directory)
+        return None
+    if not newer or staged.name != "Nexlori.exe.pending" or not staged.is_file():
+        discard_pending_update(directory)
+        return None
+    if not hmac.compare_digest(_sha256_file(staged), expected):
+        discard_pending_update(directory)
+        return None
+    return {"version": str(data["version"]), "path": str(staged), "url": str(data.get("url") or RELEASES_PAGE)}
+
+
+def can_self_update(target_exe: str | Path | None = None) -> bool:
+    """True only for the frozen Windows EXE that Nexlori may replace in place."""
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return False
+    target = Path(target_exe or sys.executable)
+    return target.name.lower() == "nexlori.exe" and target.exists()
+
+
+_APPLY_SCRIPT = r"""param(
+  [int]$ProcessId,
+  [string]$TargetPath,
+  [string]$SourcePath,
+  [string]$ManifestPath,
+  [string]$LogPath,
+  [string]$ReleaseUrl,
+  [int]$Relaunch = 1
+)
+$ErrorActionPreference = 'Stop'
+function Log([string]$text) { Add-Content -LiteralPath $LogPath -Value ("{0:o} {1}" -f (Get-Date), $text) }
+try {
+  # Wait for the Python process and for the PyInstaller bootloader that still holds the EXE.
+  try { Wait-Process -Id $ProcessId -Timeout 90 -ErrorAction SilentlyContinue } catch {}
+  $nextPath = $TargetPath + '.new'
+  $backupPath = $TargetPath + '.old'
+  Copy-Item -LiteralPath $SourcePath -Destination $nextPath -Force
+  $replaced = $false
+  for ($attempt = 1; $attempt -le 60 -and -not $replaced; $attempt++) {
+    try {
+      if (Test-Path -LiteralPath $backupPath) { Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue }
+      if (Test-Path -LiteralPath $TargetPath) { Move-Item -LiteralPath $TargetPath -Destination $backupPath -Force }
+      Move-Item -LiteralPath $nextPath -Destination $TargetPath -Force
+      $replaced = $true
+    } catch {
+      if ((-not (Test-Path -LiteralPath $TargetPath)) -and (Test-Path -LiteralPath $backupPath)) {
+        Move-Item -LiteralPath $backupPath -Destination $TargetPath -Force -ErrorAction SilentlyContinue
+      }
+      Start-Sleep -Milliseconds 500
+    }
+  }
+  if (-not $replaced) { throw "Die Programmdatei war nach 30 Sekunden noch gesperrt." }
+  Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $SourcePath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $ManifestPath -Force -ErrorAction SilentlyContinue
+  Log "Update erfolgreich installiert."
+  if ($Relaunch -eq 1) { Start-Process -FilePath $TargetPath }
+} catch {
+  Log ("Update fehlgeschlagen: " + $_.Exception.Message)
+  Remove-Item -LiteralPath ($TargetPath + '.new') -Force -ErrorAction SilentlyContinue
+  if ($Relaunch -eq 1) {
+    try { Start-Process -FilePath $TargetPath } catch {}
+    try { Start-Process -FilePath $ReleaseUrl } catch {}
+  }
+}
+"""
 
 
 def start_windows_self_update(
@@ -178,51 +290,25 @@ def start_windows_self_update(
     release_url: str,
     *,
     target_exe: str | Path | None = None,
+    relaunch: bool = True,
 ) -> bool:
-    """Start a helper which waits for Nexlori to exit, replaces its EXE and relaunches it."""
+    """Start a helper which waits for Nexlori to exit, replaces its EXE and optionally relaunches it."""
     target = Path(target_exe or sys.executable).resolve()
     staged = Path(staged_exe).resolve()
-    if os.name != "nt" or not getattr(sys, "frozen", False):
+    if not can_self_update(target):
         return False
-    if not target.exists() or not staged.exists() or target.name.lower() != "nexlori.exe":
+    if not staged.exists():
         raise UpdateError("Der Selbst-Updater kann diese Programmdatei nicht sicher ersetzen.")
+    if not release_url.startswith("https://"):
+        release_url = RELEASES_PAGE
 
     local = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     update_dir = local / "Nexlori" / "updates"
     update_dir.mkdir(parents=True, exist_ok=True)
     log_path = update_dir / "update.log"
     script = update_dir / "apply-update.ps1"
-    script.write_text(
-        r"""param(
-  [int]$ProcessId,
-  [string]$TargetPath,
-  [string]$SourcePath,
-  [string]$LogPath,
-  [string]$ReleaseUrl
-)
-$ErrorActionPreference = 'Stop'
-try {
-  try { Wait-Process -Id $ProcessId -ErrorAction SilentlyContinue } catch {}
-  $nextPath = $TargetPath + '.new'
-  Copy-Item -LiteralPath $SourcePath -Destination $nextPath -Force
-  Move-Item -LiteralPath $nextPath -Destination $TargetPath -Force
-  Add-Content -LiteralPath $LogPath -Value ("{0:o} Update erfolgreich installiert." -f (Get-Date))
-  Remove-Item -LiteralPath $SourcePath -Force -ErrorAction SilentlyContinue
-  Start-Process -FilePath $TargetPath
-} catch {
-  Add-Content -LiteralPath $LogPath -Value ("{0:o} Update fehlgeschlagen: {1}" -f (Get-Date), $_.Exception.Message)
-  try { Start-Process -FilePath $ReleaseUrl } catch {}
-  try {
-    Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show(
-      "Nexlori konnte sich nicht automatisch aktualisieren. Die Release-Seite wurde geöffnet. Fehlerdetails: " + $_.Exception.Message,
-      "Nexlori-Update", "OK", "Warning"
-    ) | Out-Null
-  } catch {}
-}
-""",
-        encoding="utf-8",
-    )
+    # UTF-8 with BOM so Windows PowerShell 5.1 reads the German messages correctly.
+    script.write_text(_APPLY_SCRIPT, encoding="utf-8-sig")
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         subprocess.Popen(
@@ -232,8 +318,10 @@ try {
                 "-ProcessId", str(os.getpid()),
                 "-TargetPath", str(target),
                 "-SourcePath", str(staged),
+                "-ManifestPath", str(staged.parent / PENDING_MANIFEST),
                 "-LogPath", str(log_path),
                 "-ReleaseUrl", release_url,
+                "-Relaunch", "1" if relaunch else "0",
             ],
             close_fds=True,
             creationflags=creationflags,

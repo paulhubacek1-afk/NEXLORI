@@ -5,4 +5,5 @@ __pycache__/
 .venv/
 build/
 dist/
-packaging/nexlori.ico
+NEXLORI/packaging/nexlori.ico
+NEXLORI/src/nexlori/vendor/
