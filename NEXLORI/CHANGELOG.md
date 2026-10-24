@@ -1,5 +1,23 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.4.0 – Automatische Updates, Nexlori Shield und neue Themes
+
+### Neu und verbessert
+- **Automatische Updates:** Nexlori lädt neue Versionen im Hintergrund herunter, prüft sie per SHA-256 und installiert sie beim Beenden automatisch. Über den neuen Update-Knopf in der Browserleiste (oder Menü ⋮) lässt sich sofort neu starten. Die Prüfung läuft beim Start und danach alle 6 Stunden, auch wenn Nexlori im Infobereich bleibt. Beides ist in den Einstellungen abschaltbar.
+- **Nexlori Shield:** eigener Werbe- und Trackerblocker direkt auf Netzwerkebene – funktioniert auch ohne Erweiterung. Mit über 200 eingebauten Werbe-/Tracking-Domains, YouTube-Werbe-Regeln, automatisch aktualisierten Filterlisten (Peter Lowe's List, optional StevenBlack Hosts), kosmetischem Filter für Werbeflächen und automatischem Überspringen von YouTube-Videowerbung.
+- Shield-Knopf mit Zähler der blockierten Anfragen pro Website; per Klick lässt sich Shield für einzelne Websites pausieren, ganz abschalten oder die Filterlisten aktualisieren.
+- **20 neue Themes:** 7 helle (Papier, Himmelblau, Salbei, Flieder, Düne, Kirschblüte, Polarlicht hell) und 13 dunkle (Fjord, Nachtfalter, Petrol, Terminal, Retrowelle, Vulkan, Tiefsee, Herbstlaub, Matcha, OLED-Schwarz, Bernstein, Sternennebel, Abendrot). Alle erfüllen WCAG AA.
+- Das Theme-Menü trennt jetzt „Helle Looks“ und „Dunkle Looks“.
+
+### Behoben
+- Der lokale NSFW-Filter löste bei jedem Aufruf einen Fehler aus (doppelte, fehlerhafte Funktionsdefinition) und war nicht angeschlossen. Er ist jetzt repariert und blockiert passende Adressen mit einer eigenen Hinweisseite.
+- „Beenden“ im Menü ⋮ hat Nexlori nur in den Infobereich verschoben, statt den Browser zu schließen.
+- Nach einem Update-Download wurde das Fenster bei aktivem Hintergrundbetrieb nur versteckt und Einstellungen wurden nicht gespeichert.
+- Der Windows-Updater scheiterte gelegentlich, weil die EXE kurz nach dem Beenden noch gesperrt war; er wartet und wiederholt jetzt bis zu 30 Sekunden und stellt bei Fehlern die alte Version wieder her.
+- Theme-Kombinationen mit mehr als drei Themes wurden beim Neustart stillschweigend auf drei gekürzt.
+- Die angezeigte Programmversion (`__version__`) passte nicht zur veröffentlichten Version.
+- Alte, doppelte Prototyp-Dateien im Hauptverzeichnis des Repositorys entfernt; `.gitignore` korrekt benannt.
+
 ## 1.3.0 – Startseite, Hintergrundbetrieb und Entwicklerwerkzeuge
 
 ### Neu und verbessert
@@ -14,7 +32,6 @@
 - Startseiten-Lesezeichen werden nach dem Hinzufügen oder Entfernen unmittelbar aktualisiert.
 - Browser-Diagnose erkennt die Chromium-Version aus dem User-Agent.
 
-## 1.2.0 – Browser-Update, Audio, Speicher und Theme-Packs
 ## 1.2.0 – Browser-Update, Audio, Speicher und Theme-Packs
 
 ### Neu und verbessert

@@ -16,11 +16,12 @@ from urllib.parse import urlsplit
 
 from PySide6 import __version__ as PYSIDE_VERSION
 from PySide6.QtCore import (
-    QFile, QIODevice, QObject, QEventLoop, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect,
+    QFile, QIODevice, QObject, QEventLoop, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect,
     QStringListModel, QThread, QTimer, QUrl, QUrlQuery, Qt, Signal, Slot, qVersion,
 )
 from PySide6.QtGui import (
-    QAction, QActionGroup, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut,
+    QAction, QActionGroup, QColor, QDesktopServices, QIcon, QKeySequence, QPainter, QPainterPath, QPalette, QPen,
+    QPixmap, QShortcut,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -57,6 +58,7 @@ from PySide6.QtWebEngineCore import (
     QWebEngineProfile,
     QWebEngineScript,
     QWebEngineSettings,
+    QWebEngineUrlRequestInfo,
     QWebEngineUrlRequestInterceptor,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -66,17 +68,20 @@ from . import __version__
 from .browser import normalize_input
 from .core.settings import Settings, canonical_search_url, default_settings_path
 from .animations import AccentLine, Motion, animate_progress, cascade_in, crossfade
+from .core.adblock import (
+    FILTER_LISTS, AdBlocker, FilterListError, FilterListStore, build_cosmetic_script, download_filter_list, host_of,
+)
 from .core.builtin_addons import ADDONS, build_addons_script, is_enabled, reader_script
 from .core.privacy import strip_tracking_params, tabs_to_sleep, upgrade_to_https
 from .core.theme_shop import ShopError, ThemeStore, default_theme_dir
 from .core.themes import (
     BUILTIN_THEMES, Theme, all_themes, combine_themes, get_theme, installed_theme_names, is_known_theme,
-    relative_luminance,
+    is_light_theme, relative_luminance,
 )
 from .links import DISCORD_URL, FEEDBACK_EMAIL, REPOSITORY_URL
 from .tabstrip import TabStrip
 from .titlebar import DialogThemer, ResizeFrame, TitleBar, apply_native_titlebar_colors
-from .web_safety import addons_page_html, home_network_page_html, normalize_home_target
+from .web_safety import addons_page_html, error_page_html, home_network_page_html, is_nsfw_url, normalize_home_target
 from .extension_utils import (
     bundled_ubolite_path,
     unpack_extension_package,
@@ -87,6 +92,10 @@ from .extension_utils import (
   )
 from .page_theme import build_page_theme_script
 from .start_page import build_start_page as _start_page
+from .updater import (
+    PERIODIC_CHECK_SECONDS, RELEASES_PAGE, can_self_update, discard_pending_update, pending_update,
+    start_windows_self_update,
+)
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
@@ -154,6 +163,29 @@ def _line_icon(kind: str, color: str) -> QIcon:
         painter.setPen(QPen(paint, 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         painter.drawLine(10, 10, 22, 22)
         painter.drawLine(22, 10, 10, 22)
+    elif kind in ("shield", "shield-off"):
+        path = QPainterPath()
+        path.moveTo(16, 3)
+        path.lineTo(27, 7)
+        path.cubicTo(27, 18, 23, 25, 16, 29)
+        path.cubicTo(9, 25, 5, 18, 5, 7)
+        path.closeSubpath()
+        if kind == "shield":
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(paint)
+            painter.drawPath(path)
+            painter.setPen(QPen(QColor("#FFFFFF" if paint.lightnessF() < 0.6 else "#111111"), 2.6,
+                                Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.drawPolyline([QPointF(11, 16), QPointF(15, 20), QPointF(21, 12)])
+        else:
+            painter.setPen(QPen(paint, 2.4))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+            painter.drawLine(8, 26, 25, 6)
+    elif kind == "update":
+        painter.setPen(QPen(paint, 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        painter.drawLine(16, 26, 16, 7)
+        painter.drawPolyline([QPointF(8, 14), QPointF(16, 6), QPointF(24, 14)])
     painter.end()
     return QIcon(pixmap)
 
@@ -250,6 +282,44 @@ class UpdateWorker(QThread):
             self.result_data["error"] = str(exc)
 
 
+class ShieldInterceptor(QWebEngineUrlRequestInterceptor):
+    """Nexlori Shield: blocks ad and tracker subresources before Chromium requests them."""
+
+    def __init__(self, blocker: AdBlocker, parent=None):
+        super().__init__(parent)
+        self.blocker = blocker
+        self._main_frame = QWebEngineUrlRequestInfo.ResourceType.ResourceTypeMainFrame
+
+    def interceptRequest(self, info) -> None:  # noqa: N802
+        try:
+            if info.resourceType() == self._main_frame:
+                return
+            if self.blocker.should_block(info.requestUrl().toString(), info.firstPartyUrl().toString()):
+                info.block(True)
+        except Exception:  # noqa: BLE001 - a filter error must never break page loading
+            return
+
+
+class FilterListWorker(QThread):
+    """Downloads Shield filter lists away from the UI thread and returns the merged domain set."""
+
+    def __init__(self, refresh_ids: list[str], active_ids: list[str], store: FilterListStore, parent=None):
+        super().__init__(parent)
+        self.refresh_ids = list(refresh_ids)
+        self.active_ids = list(active_ids)
+        self.store = store
+        self.result_data: dict = {"updated": [], "errors": [], "domains": set()}
+
+    def run(self) -> None:
+        for list_id in self.refresh_ids:
+            try:
+                self.store.store(list_id, download_filter_list(list_id))
+                self.result_data["updated"].append(list_id)
+            except (FilterListError, OSError) as exc:
+                self.result_data["errors"].append(str(exc))
+        self.result_data["domains"] = self.store.domains(self.active_ids)
+
+
 class CredentialCaptureBridge(QObject):
     """Small page-scoped bridge used only after a secure login form is submitted."""
 
@@ -288,6 +358,10 @@ class BrowserPage(QWebEnginePage):
                 QTimer.singleShot(0, lambda: self.owner.handle_internal_url(self, internal))
             return False
         if is_main_frame and url.scheme().lower() in {"http", "https"}:
+            if self.owner.settings.block_nsfw and is_nsfw_url(url.toString()):
+                blocked = url.toString()
+                QTimer.singleShot(0, lambda: self.owner.show_blocked_page(self, blocked))
+                return False
             target = self.owner.rewrite_navigation(self, url, navigation_type)
             if target is not None:
                 QTimer.singleShot(0, lambda: self.setUrl(QUrl(target)))
@@ -351,6 +425,17 @@ class NexloriWindow(QMainWindow):
         self.profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
         self.profile.setHttpCacheMaximumSize(96 * 1024 * 1024)
         self.profile.downloadRequested.connect(self._download_requested)
+        # Nexlori Shield arbeitet auf Netzwerkebene und braucht keine Erweiterung.
+        self.filter_store = FilterListStore(settings_path.parent / "shield")
+        self.adblock = AdBlocker(enabled=settings.adblock_enabled, allowlist=settings.adblock_allowlist)
+        self._shield_interceptor = ShieldInterceptor(self.adblock, self)
+        self.profile.setUrlRequestInterceptor(self._shield_interceptor)
+        self._shield_script: QWebEngineScript | None = None
+        self._filter_worker: FilterListWorker | None = None
+        self._refresh_shield_script()
+        self.update_dir = settings_path.parent / "updates"
+        self._pending_update: dict | None = None
+        self._applying_update = False
         self._page_theme_script = None
         self._refresh_page_theme_script()
         self._refresh_addons_script()
@@ -371,11 +456,22 @@ class NexloriWindow(QMainWindow):
         self._apply_browser_theme()
         self._bind_shortcuts()
         self._start_tab_sleep_timer()
+        self._refresh_shield_button()
         view = self.new_tab(start_page=start_url is None, activate=True)
         if start_url:
             self.navigate_view(view, start_url)
         # Netzwerk-/Erweiterungsarbeit verzögert starten, damit das Browserfenster zuerst bedienbar ist.
         QTimer.singleShot(3200, self._ensure_default_extension)
+        QTimer.singleShot(1500, self._load_shield_lists)
+        QTimer.singleShot(4000, self._restore_pending_update)
+        self._update_timer = QTimer(self)
+        self._update_timer.setInterval(PERIODIC_CHECK_SECONDS * 1000)
+        self._update_timer.timeout.connect(self._periodic_update_check)
+        self._update_timer.start()
+        self._shield_timer = QTimer(self)
+        self._shield_timer.setInterval(1500)
+        self._shield_timer.timeout.connect(self._refresh_shield_button)
+        self._shield_timer.start()
         if self.settings.auto_update_check:
             QTimer.singleShot(10000, self._start_silent_update_check)
 
@@ -499,6 +595,14 @@ class NexloriWindow(QMainWindow):
 
         self.bookmark_button = self._tool("☆", "Lesezeichen hinzufügen/entfernen", self.toggle_bookmark)
         nav.addWidget(self.bookmark_button)
+        self.shield_button = QToolButton(toolbar)
+        self.shield_button.setObjectName("shieldButton")
+        self.shield_button.setToolTip("Nexlori Shield – Werbe- und Trackerblocker")
+        self.shield_button.setAutoRaise(True)
+        self.shield_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.shield_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.shield_button.clicked.connect(self.show_shield_menu)
+        nav.addWidget(self.shield_button)
         self.music_button = self._tool("♫", "Spotify Mini-Player", self.show_spotify_popup)
         nav.addWidget(self.music_button)
         self.page_theme_button = QToolButton(toolbar)
@@ -512,11 +616,21 @@ class NexloriWindow(QMainWindow):
 
         self.theme_button = self._tool("✦", "Theme auswählen", self.show_theme_menu)
         nav.addWidget(self.theme_button)
+        self.update_button = QToolButton(toolbar)
+        self.update_button.setObjectName("updateButton")
+        self.update_button.setAutoRaise(True)
+        self.update_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.update_button.setText("Update")
+        self.update_button.clicked.connect(self._on_update_button)
+        self.update_button.hide()
+        nav.addWidget(self.update_button)
         self.more_button = self._tool("⋮", "Nexlori-Menü", self.show_more_menu)
         nav.addWidget(self.more_button)
         self.toolbar_icons = {
             "home": self.home_button,
             "bookmark": self.bookmark_button,
+            "shield": self.shield_button,
             "spotify": self.music_button,
             "page_theme": self.page_theme_button,
             "theme": self.theme_button,
@@ -606,10 +720,12 @@ class NexloriWindow(QMainWindow):
         favourites.addSeparator()
         favourites.addAction("Favoriten auswählen …", self.edit_pride_favorites)
 
+        base_names = {"hell", "dunkel", "ruhig", "hochkontrast"}
         groups = (
             ("Basis", [n for n in ("hell", "dunkel", "ruhig", "hochkontrast") if n in BUILTIN_THEMES]),
             ("Alle Pride-Flaggen", [n for n in BUILTIN_THEMES if n.startswith("pride-")]),
-            ("Weitere Looks", [n for n in BUILTIN_THEMES if n not in {"hell", "dunkel", "ruhig", "hochkontrast"} and not n.startswith("pride-")]),
+            ("Helle Looks", [n for n, t in BUILTIN_THEMES.items() if n not in base_names and not n.startswith("pride-") and is_light_theme(t)]),
+            ("Dunkle Looks", [n for n, t in BUILTIN_THEMES.items() if n not in base_names and not n.startswith("pride-") and not is_light_theme(t)]),
             ("Aus dem Theme-Shop", installed_theme_names()),
         )
         for label, names in groups:
@@ -823,6 +939,7 @@ class NexloriWindow(QMainWindow):
         labels = {
             "home": "Startseite",
             "bookmark": "Lesezeichen",
+            "shield": "Nexlori Shield (Werbeblocker)",
             "spotify": "Spotify Mini-Player",
             "page_theme": "Website-Farben (Aa)",
             "theme": "Theme-Auswahl",
@@ -875,6 +992,7 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Spotify Mini-Player", self.show_spotify_popup, QKeySequence("Ctrl+Shift+M"))
         self.more_menu.addAction("Passwortmanager", self.show_password_manager, QKeySequence("Ctrl+Shift+P"))
         self.more_menu.addAction("Nexlori-Add-ons …", self.show_addons_center)
+        self.more_menu.addAction("Nexlori Shield …", self.show_shield_menu)
         self.tools_menu = self.more_menu.addMenu("Werkzeuge")
         developer_menu = self.more_menu.addMenu("Entwickler")
         developer_menu.addAction("Entwicklerwerkzeuge (F12)", self.show_developer_tools)
@@ -889,13 +1007,15 @@ class NexloriWindow(QMainWindow):
         self.more_menu.addAction("Webseite neu laden", self.reload_current, QKeySequence("F5"))
         self.more_menu.addAction("Theme auswählen", self.show_theme_menu)
         self.more_menu.addAction("Nach Updates suchen", self.check_for_updates)
+        self.install_update_action = self.more_menu.addAction("Update installieren und neu starten", lambda: self.apply_pending_update(relaunch=True))
+        self.install_update_action.setVisible(False)
         self.more_menu.addSeparator()
         self.more_menu.addAction("💬 Discord-Community beitreten …", self.open_discord)
         self.more_menu.addAction("Feedback per E-Mail …", self.open_feedback_email)
         self.more_menu.addAction("Verbesserung auf GitHub melden …", self.open_feedback_github)
         self.more_menu.addSeparator()
         self.more_menu.addAction("Über Nexlori", self.show_about)
-        self.more_menu.addAction("Beenden", self.close, QKeySequence("Alt+F4"))
+        self.more_menu.addAction("Beenden", self.quit_application)
         self._refresh_tools_menu()
 
     def _bind_shortcuts(self) -> None:
@@ -1764,10 +1884,18 @@ QPushButton:disabled {{ color:{muted}; }}
         form = QFormLayout()
         theme_css = QCheckBox("Website-Farbschema unterstützen (Website-CSS bleibt erhalten)", dialog)
         theme_css.setChecked(self.settings.adapt_page_theme)
-        ubol = QCheckBox("uBlock Origin Lite aktivieren (Werbung und Tracker blockieren)", dialog)
+        shield = QCheckBox("Nexlori Shield: Werbung und Tracker blockieren", dialog)
+        shield.setChecked(self.settings.adblock_enabled)
+        shield_cosmetic = QCheckBox("Werbeflächen ausblenden und YouTube-Werbung überspringen", dialog)
+        shield_cosmetic.setChecked(self.settings.adblock_cosmetic)
+        ubol = QCheckBox("Zusätzlich uBlock Origin Lite verwenden (Erweiterung)", dialog)
         ubol.setChecked(self.settings.ubol_enabled)
-        updates = QCheckBox("Beim Start automatisch nach Updates suchen", dialog)
+        updates = QCheckBox("Automatisch nach Updates suchen (beim Start und alle 6 Stunden)", dialog)
         updates.setChecked(self.settings.auto_update_check)
+        auto_install = QCheckBox("Updates automatisch herunterladen und beim Beenden installieren", dialog)
+        auto_install.setChecked(self.settings.auto_update_install)
+        auto_install.setEnabled(updates.isChecked())
+        updates.toggled.connect(auto_install.setEnabled)
         popups = QCheckBox("Website-Pop-ups und neue Fenster erlauben", dialog)
         popups.setChecked(self.settings.allow_web_popups)
         background = QCheckBox("Beim Schließen in den Infobereich minimieren (Nexlori bleibt aktiv)", dialog)
@@ -1808,8 +1936,11 @@ QPushButton:disabled {{ color:{muted}; }}
         form.addRow("Speicher", memory_saver)
         form.addRow("Fenster", titlebar)
         form.addRow("Website-Farben", theme_css)
-        form.addRow("Werbe- und Trackerschutz", ubol)
+        form.addRow("Werbe- und Trackerschutz", shield)
+        form.addRow("", shield_cosmetic)
+        form.addRow("", ubol)
         form.addRow("Updates", updates)
+        form.addRow("", auto_install)
         form.addRow("Pop-ups", popups)
         form.addRow("Hintergrundbetrieb", background)
         form.addRow("Standard-Zoom", zoom)
@@ -1844,6 +1975,19 @@ QPushButton:disabled {{ color:{muted}; }}
         self.settings.adapt_page_theme = theme_css.isChecked()
         self.settings.ubol_enabled = ubol.isChecked()
         self.settings.auto_update_check = updates.isChecked()
+        self.settings.auto_update_install = auto_install.isChecked()
+        shield_changed = (
+            shield.isChecked() != self.settings.adblock_enabled
+            or shield_cosmetic.isChecked() != self.settings.adblock_cosmetic
+        )
+        self.settings.adblock_enabled = shield.isChecked()
+        self.settings.adblock_cosmetic = shield_cosmetic.isChecked()
+        self.adblock.set_enabled(self.settings.adblock_enabled)
+        self._refresh_shield_script()
+        self._shield_state = None
+        self._refresh_shield_button()
+        if shield_changed:
+            self.reload_current()
         self.settings.memory_saver = memory_saver.isChecked()
         self.settings.allow_web_popups = popups.isChecked()
         self.settings.background_on_close = background.isChecked()
@@ -1965,24 +2109,300 @@ QPushButton:disabled {{ color:{muted}; }}
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Passwortmanager", f"Der Passwortmanager konnte nicht geöffnet werden: {exc}")
 
+    # ------------------------------------------------------------------ Nexlori Shield
+    def _refresh_shield_script(self) -> None:
+        """Kosmetischer Filter und YouTube-Werbung-Überspringen für jedes neue Dokument."""
+        scripts = self.profile.scripts()
+        if self._shield_script is not None:
+            try:
+                scripts.remove(self._shield_script)
+            except (RuntimeError, TypeError):
+                pass
+            self._shield_script = None
+        if not (self.settings.adblock_enabled and self.settings.adblock_cosmetic):
+            return
+        script = QWebEngineScript()
+        script.setName("NexloriShield")
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        # Eigene Welt: Websites können den Filter weder sehen noch abschalten.
+        script.setWorldId(QWebEngineScript.ScriptWorldId.ApplicationWorld)
+        script.setRunsOnSubFrames(True)
+        script.setSourceCode(build_cosmetic_script(allowlisted_hosts=self.settings.adblock_allowlist))
+        scripts.insert(script)
+        self._shield_script = script
+
+    def _load_shield_lists(self) -> None:
+        """Gespeicherte Filterlisten laden und veraltete im Hintergrund erneuern."""
+        active = [item for item in self.settings.adblock_lists]
+        try:
+            self.adblock.set_extra_domains(self.filter_store.domains(active))
+        except OSError:
+            pass
+        if self.settings.adblock_enabled:
+            stale = self.filter_store.needs_refresh(active)
+            if stale:
+                self._start_filter_update(stale, interactive=False)
+
+    def _start_filter_update(self, list_ids: list[str], *, interactive: bool) -> None:
+        if self._filter_worker is not None and self._filter_worker.isRunning():
+            return
+        worker = FilterListWorker(list_ids, list(self.settings.adblock_lists), self.filter_store, self)
+        worker.finished.connect(lambda w=worker, i=interactive: self._on_filter_update_finished(w, i))
+        self._filter_worker = worker
+        if interactive:
+            self.statusBar().showMessage("Shield-Filterlisten werden aktualisiert …", 4000)
+        worker.start()
+
+    def _on_filter_update_finished(self, worker: FilterListWorker, interactive: bool) -> None:
+        data = worker.result_data
+        self._filter_worker = None
+        worker.deleteLater()
+        self.adblock.set_extra_domains(data.get("domains") or set())
+        if interactive:
+            if data["errors"]:
+                QMessageBox.warning(self, "Nexlori Shield", "\n".join(data["errors"]))
+            else:
+                self.statusBar().showMessage(
+                    f"Shield-Filterlisten aktualisiert · {self.adblock.domain_count:,} Domains".replace(",", "."), 5000
+                )
+
+    def _current_site(self) -> str:
+        view = self.current_view()
+        if view is None:
+            return ""
+        url = view.url()
+        return host_of(url.toString()) if url.scheme() in {"http", "https"} else ""
+
+    def _refresh_shield_button(self) -> None:
+        if self._closing or not hasattr(self, "shield_button"):
+            return
+        site = self._current_site()
+        paused = bool(site) and self.adblock.is_allowlisted(site)
+        active = self.settings.adblock_enabled and not paused
+        count = self.adblock.blocked_for_site(site) if site and active else 0
+        color = self.theme.accent if active else _mix_hex(self.theme.fg, self.theme.surface, 0.45)
+        key = (active, count, color)
+        if getattr(self, "_shield_state", None) == key:
+            return
+        self._shield_state = key
+        self.shield_button.setIcon(_line_icon("shield" if active else "shield-off", color))
+        self.shield_button.setText(str(count) if count else "")
+        if not self.settings.adblock_enabled:
+            tip = "Nexlori Shield ist ausgeschaltet"
+        elif paused:
+            tip = f"Nexlori Shield pausiert auf {site}"
+        else:
+            tip = f"Nexlori Shield: {count} Werbe- und Tracker-Anfragen auf dieser Website blockiert"
+        self.shield_button.setToolTip(tip)
+
+    def show_shield_menu(self) -> None:
+        site = self._current_site()
+        menu = QMenu(self)
+        header = menu.addAction(
+            f"{self.adblock.blocked_total:,} Anfragen in dieser Sitzung blockiert".replace(",", ".")
+        )
+        header.setEnabled(False)
+        if site:
+            site_count = menu.addAction(f"{self.adblock.blocked_for_site(site)} auf {site}")
+            site_count.setEnabled(False)
+        menu.addSeparator()
+        enabled = menu.addAction("Werbeblocker aktiv")
+        enabled.setCheckable(True)
+        enabled.setChecked(self.settings.adblock_enabled)
+        enabled.toggled.connect(self.set_adblock_enabled)
+        if site:
+            paused = self.adblock.is_allowlisted(site)
+            pause = menu.addAction(f"Auf {site} pausieren")
+            pause.setCheckable(True)
+            pause.setChecked(paused)
+            pause.setEnabled(self.settings.adblock_enabled)
+            pause.toggled.connect(lambda state, host=site: self.set_site_allowed(host, state))
+        cosmetic = menu.addAction("Werbeflächen ausblenden und YouTube-Werbung überspringen")
+        cosmetic.setCheckable(True)
+        cosmetic.setChecked(self.settings.adblock_cosmetic)
+        cosmetic.setEnabled(self.settings.adblock_enabled)
+        cosmetic.toggled.connect(self.set_adblock_cosmetic)
+        menu.addSeparator()
+        lists_menu = menu.addMenu("Filterlisten")
+        info = self.filter_store.info()
+        for item in FILTER_LISTS:
+            details = info.get(item.id, {})
+            suffix = f" · {details.get('count', 0):,} Domains".replace(",", ".") if details.get("count") else ""
+            action = lists_menu.addAction(item.label + suffix)
+            action.setCheckable(True)
+            action.setChecked(item.id in self.settings.adblock_lists)
+            action.setToolTip(item.description)
+            action.toggled.connect(lambda state, list_id=item.id: self.set_filter_list(list_id, state))
+        lists_menu.addSeparator()
+        lists_menu.addAction(
+            "Jetzt aktualisieren",
+            lambda: self._start_filter_update(list(self.settings.adblock_lists), interactive=True),
+        )
+        if self.settings.adblock_allowlist:
+            allow_menu = menu.addMenu("Pausierte Websites")
+            for host in sorted(self.settings.adblock_allowlist):
+                allow_menu.addAction(f"{host} wieder schützen", lambda h=host: self.set_site_allowed(h, False))
+        menu.addSeparator()
+        menu.addAction("uBlock Origin Lite und weitere Add-ons …", self.show_extensions_manager)
+        anchor = self.shield_button if self.shield_button.isVisible() else self.more_button
+        menu.exec(anchor.mapToGlobal(QPoint(0, anchor.height())))
+
+    def set_adblock_enabled(self, enabled: bool) -> None:
+        self.settings.adblock_enabled = bool(enabled)
+        self.adblock.set_enabled(enabled)
+        self._refresh_shield_script()
+        self._save_settings()
+        if enabled:
+            self._load_shield_lists()
+        self._shield_state = None
+        self._refresh_shield_button()
+        self.statusBar().showMessage(
+            "Nexlori Shield ist aktiv." if enabled else "Nexlori Shield ist ausgeschaltet.", 3500
+        )
+        self.reload_current()
+
+    def set_adblock_cosmetic(self, enabled: bool) -> None:
+        self.settings.adblock_cosmetic = bool(enabled)
+        self._refresh_shield_script()
+        self._save_settings()
+        self.reload_current()
+
+    def set_site_allowed(self, host: str, allowed: bool) -> None:
+        hosts = [h for h in self.settings.adblock_allowlist if h != host]
+        if allowed:
+            hosts.append(host)
+        self.settings.adblock_allowlist = sorted(set(hosts))
+        self.adblock.set_allowlist(self.settings.adblock_allowlist)
+        self.adblock.reset_site(host)
+        self._refresh_shield_script()
+        self._save_settings()
+        self._shield_state = None
+        self._refresh_shield_button()
+        if host == self._current_site():
+            self.reload_current()
+
+    def set_filter_list(self, list_id: str, enabled: bool) -> None:
+        lists = [item for item in self.settings.adblock_lists if item != list_id]
+        if enabled:
+            lists.append(list_id)
+        self.settings.adblock_lists = lists
+        self._save_settings()
+        self.adblock.set_extra_domains(self.filter_store.domains(lists))
+        if enabled and self.filter_store.needs_refresh([list_id]):
+            self._start_filter_update([list_id], interactive=True)
+
+    def show_blocked_page(self, page: QWebEnginePage, url: str) -> None:
+        view = QWebEngineView.forPage(page)
+        if view is None or self.tabs.indexOf(view) < 0:
+            return
+        view._nexlori_start = False
+        view._nexlori_internal = "nexlori://blocked"
+        view.setHtml(error_page_html(self.theme, "blocked", url), QUrl("about:blank"))
+        if view is self.current_view():
+            self.address.setText(url)
+            self.address.setModified(False)
+            self.address.set_security("internal")
+
+    # ------------------------------------------------------------------ Updates
     def _start_silent_update_check(self) -> None:
+        if self._pending_update is not None:
+            return  # ein geprüftes Update wartet bereits auf die Installation
         self._silent_update_check = True
         self._start_update_worker("check")
 
+    def _periodic_update_check(self) -> None:
+        """Nexlori läuft oft tagelang im Infobereich – deshalb regelmäßig, nicht nur beim Start prüfen."""
+        if self.settings.auto_update_check and not self._closing:
+            self._start_silent_update_check()
+
     def check_for_updates(self) -> None:
+        if self._pending_update is not None:
+            self._offer_restart_for_update(self._pending_update, interactive=True)
+            return
         self._silent_update_check = False
         self._start_update_worker("check")
 
     def _start_update_worker(self, task: str, release: dict | None = None) -> None:
         if self._update_worker is not None and self._update_worker.isRunning():
-            self.statusBar().showMessage("Ein Update-Vorgang läuft bereits.", 3000)
+            if not self._silent_update_check:
+                self.statusBar().showMessage("Ein Update-Vorgang läuft bereits.", 3000)
             return
-        update_dir = self.settings_path.parent / "updates"
-        worker = UpdateWorker(task, release=release, update_dir=update_dir, parent=self)
+        worker = UpdateWorker(task, release=release, update_dir=self.update_dir, parent=self)
         worker.finished.connect(self._on_update_worker_finished)
         self._update_worker = worker
-        self.statusBar().showMessage("Suche nach Nexlori-Updates …" if task == "check" else "Update wird heruntergeladen und geprüft …")
+        if not self._silent_update_check or task == "download":
+            self.statusBar().showMessage(
+                "Suche nach Nexlori-Updates …" if task == "check" else "Update wird im Hintergrund heruntergeladen und geprüft …",
+                5000,
+            )
         worker.start()
+
+    def _restore_pending_update(self) -> None:
+        """Ein früher heruntergeladenes, geprüftes Update übernehmen (oder Reste aufräumen)."""
+        try:
+            pending = pending_update(self.update_dir, APP_VERSION)
+        except OSError:
+            pending = None
+        if pending is not None and can_self_update():
+            self._set_pending_update(pending, announce=False)
+
+    def _set_pending_update(self, pending: dict, *, announce: bool) -> None:
+        self._pending_update = pending
+        version = pending.get("version", "")
+        self.update_button.setText(f"Update {version}")
+        self.update_button.setToolTip(
+            f"Nexlori {version} ist heruntergeladen und geprüft. Klicken, um jetzt neu zu starten. "
+            "Sonst wird das Update beim Beenden automatisch installiert."
+        )
+        self.update_button.setIcon(_line_icon("update", self.theme.accent))
+        self.update_button.show()
+        self.install_update_action.setText(f"Update {version} installieren und neu starten")
+        self.install_update_action.setVisible(True)
+        if announce:
+            self.statusBar().showMessage(f"Nexlori {version} ist bereit und wird beim Beenden installiert.", 8000)
+            if self.tray_icon is not None and self.tray_icon.isVisible() and not self.isVisible():
+                self.tray_icon.showMessage(
+                    "Nexlori-Update bereit",
+                    f"Version {version} wird beim nächsten Beenden automatisch installiert.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    5000,
+                )
+
+    def _on_update_button(self) -> None:
+        if self._pending_update is not None:
+            self._offer_restart_for_update(self._pending_update, interactive=True)
+
+    def _offer_restart_for_update(self, pending: dict, *, interactive: bool) -> None:
+        answer = QMessageBox.question(
+            self, "Nexlori-Update bereit",
+            f"Nexlori {pending.get('version', '')} ist heruntergeladen und die SHA-256-Prüfsumme stimmt.\n\n"
+            "Jetzt neu starten und installieren? Deine Tabs werden geschlossen, Einstellungen und Lesezeichen bleiben erhalten.\n"
+            "Wählst du „Später“, wird das Update beim nächsten Beenden automatisch installiert.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.apply_pending_update(relaunch=True)
+
+    def apply_pending_update(self, *, relaunch: bool) -> bool:
+        """Startet den Austausch der EXE. Mit ``relaunch`` beendet sich Nexlori sofort und startet neu."""
+        pending = self._pending_update
+        if pending is None or self._applying_update:
+            return False
+        try:
+            started = start_windows_self_update(pending["path"], pending.get("url") or RELEASES_PAGE, relaunch=relaunch)
+        except Exception as exc:  # noqa: BLE001
+            if relaunch:
+                QMessageBox.warning(self, "Nexlori-Update", f"Der Updater konnte nicht gestartet werden: {exc}")
+            return False
+        if not started:
+            if relaunch:
+                QDesktopServices.openUrl(QUrl(pending.get("url") or RELEASES_PAGE))
+            return False
+        self._applying_update = True
+        if relaunch:
+            self.quit_application()
+        return True
 
     def _on_update_worker_finished(self) -> None:
         worker = self._update_worker
@@ -1991,50 +2411,60 @@ QPushButton:disabled {{ color:{muted}; }}
         data = dict(worker.result_data)
         self._update_worker = None
         worker.deleteLater()
+        silent = self._silent_update_check
         if data.get("error"):
             message = str(data["error"])
-            self.statusBar().showMessage("Update-Vorgang fehlgeschlagen.", 5000)
-            if not self._silent_update_check:
+            if not silent:
+                self.statusBar().showMessage("Update-Vorgang fehlgeschlagen.", 5000)
                 QMessageBox.warning(self, "Nexlori-Update", message)
             return
         if data.get("task") == "check":
             release = data.get("release")
             if not release:
-                self.statusBar().showMessage("Nexlori ist auf dem neuesten veröffentlichten Stand.", 4000)
-                if not self._silent_update_check:
-                    QMessageBox.information(self, "Nexlori-Update", f"Du verwendest Nexlori {APP_VERSION}. Es wurde kein neueres veröffentlichtes Release gefunden.")
+                if not silent:
+                    self.statusBar().showMessage("Nexlori ist auf dem neuesten Stand.", 4000)
+                    QMessageBox.information(self, "Nexlori-Update", f"Du verwendest Nexlori {APP_VERSION}. Das ist die neueste Version.")
+                return
+            if not can_self_update():
+                # Entwicklungs- oder Nicht-Windows-Version: nur auf die Release-Seite hinweisen.
+                self.statusBar().showMessage(f"Nexlori {release['version']} ist verfügbar.", 8000)
+                if not silent:
+                    answer = QMessageBox.question(
+                        self, "Nexlori-Update verfügbar",
+                        f"Version {release['version']} ist verfügbar. Diese Nexlori-Version kann sich nicht selbst "
+                        "ersetzen. Release-Seite öffnen?",
+                    )
+                    if answer == QMessageBox.StandardButton.Yes:
+                        QDesktopServices.openUrl(QUrl(str(release.get("url") or RELEASES_PAGE)))
+                return
+            if self.settings.auto_update_install:
+                self._start_update_worker("download", release)
                 return
             notes = str(release.get("body") or "Keine Release-Notizen vorhanden.")
-            details = (
+            answer = QMessageBox.question(
+                self, "Nexlori-Update verfügbar",
                 f"Version {release['version']} ist verfügbar. Du verwendest Nexlori {APP_VERSION}.\n\n"
                 + notes[:1200]
-                + "\n\nMöchtest du das Update herunterladen und die EXE aktualisieren?"
-            )
-            answer = QMessageBox.question(
-                self, "Nexlori-Update verfügbar", details,
+                + "\n\nJetzt im Hintergrund herunterladen?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )
             if answer == QMessageBox.StandardButton.Yes:
+                self._silent_update_check = False
                 self._start_update_worker("download", release)
             else:
                 self.statusBar().showMessage(f"Nexlori {release['version']} ist verfügbar.", 5000)
             return
         if data.get("task") == "download":
             release = data.get("release") or {}
-            try:
-                from .updater import start_windows_self_update
-                started = start_windows_self_update(str(data["path"]), str(release.get("url") or "https://github.com/paulhubacek1-afk/NEXLORI/releases"))
-            except Exception as exc:  # noqa: BLE001
-                QMessageBox.warning(self, "Nexlori-Update", f"Der Download wurde geprüft, aber der Updater konnte nicht gestartet werden: {exc}")
-                return
-            if not started:
-                QDesktopServices.openUrl(QUrl(str(release.get("url") or "https://github.com/paulhubacek1-afk/NEXLORI/releases")))
-                QMessageBox.information(self, "Nexlori-Update", "Das Update wurde heruntergeladen und die Prüfsumme stimmt. Starte die Release-Seite, damit du die Windows-Version manuell installieren kannst.")
-                return
-            QMessageBox.information(self, "Nexlori-Update", "Update verifiziert. Nexlori wird geschlossen, aktualisiert und anschließend neu gestartet.")
-            self.close()
-            QApplication.quit()
+            pending = {
+                "version": str(release.get("version") or ""),
+                "path": str(data["path"]),
+                "url": str(release.get("url") or RELEASES_PAGE),
+            }
+            self._set_pending_update(pending, announce=True)
+            if not silent and self.isVisible():
+                self._offer_restart_for_update(pending, interactive=True)
 
     def show_developer_tools(self) -> None:
         """Open Chromium DevTools for the active tab: Elements, Console, Network and Performance."""
@@ -2102,6 +2532,9 @@ QPushButton:disabled {{ color:{muted}; }}
             f"Aktueller Titel: {current_title}\nAktuelle URL: {current_url}\n"
             f"Profilordner: {self.storage_dir}\nCache-Ordner: {self.cache_dir}\n"
             f"Einstellungen: {self.settings_path}\nLesezeichen: {len(self.bookmarks)}\n"
+            f"Nexlori Shield aktiv: {'Ja' if self.settings.adblock_enabled else 'Nein'} "
+            f"({self.adblock.domain_count} Filterdomains, {self.adblock.blocked_total} Anfragen blockiert)\n"
+            f"Automatische Update-Installation: {'Ja' if self.settings.auto_update_install else 'Nein'}\n"
             f"uBlock Origin Lite aktiviert: {'Ja' if self.settings.ubol_enabled else 'Nein'}\n"
             f"Speichersparmodus: {'Ja' if self.settings.memory_saver else 'Nein'}\n"
             f"Hintergrundbetrieb beim Schließen: {'Ja' if self.settings.background_on_close else 'Nein'}\n"
@@ -2510,7 +2943,12 @@ QPushButton:disabled {{ color:{muted}; }}
             )
             return
         self._closing = True
+        if self._pending_update is not None and not self._applying_update and self.settings.auto_update_install:
+            # Geprüftes Update beim Beenden still installieren; der nächste Start ist schon die neue Version.
+            self.apply_pending_update(relaunch=False)
         self._sleep_timer.stop()
+        self._update_timer.stop()
+        self._shield_timer.stop()
         self.accent_line.pause(True)
         if self.tray_icon is not None:
             self.tray_icon.hide()

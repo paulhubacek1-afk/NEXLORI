@@ -45,3 +45,40 @@ def test_legacy_duckduckgo_template_is_normalized():
     assert canonical_search_url(legacy) == DEFAULT_SEARCH_URL
     assert Settings().search_url == DEFAULT_SEARCH_URL
     assert canonical_search_url("https://www.google.com/search?q={}") == "https://www.google.com/search?q={}"
+
+
+def test_shield_and_auto_install_defaults():
+    settings = Settings()
+    assert settings.adblock_enabled is True
+    assert settings.adblock_cosmetic is True
+    assert settings.adblock_lists == ["pgl"]
+    assert settings.auto_update_install is True
+    assert "shield" in settings.toolbar_visible_icons
+    assert settings.problems() == []
+
+
+def test_old_settings_get_the_shield_button_once():
+    migrated = Settings.from_dict({"toolbar_visible_icons": ["home", "theme"]})
+    assert migrated.toolbar_visible_icons == ["home", "theme", "shield"]
+    kept = Settings.from_dict({"toolbar_visible_icons": ["home"], "adblock_enabled": True})
+    assert kept.toolbar_visible_icons == ["home"]
+
+
+def test_invalid_shield_settings_are_rejected():
+    import pytest
+
+    with pytest.raises(ValueError, match="adblock_lists"):
+        Settings.from_dict({"adblock_lists": ["unknown"]})
+    with pytest.raises(ValueError, match="adblock_allowlist"):
+        Settings.from_dict({"adblock_allowlist": [""]})
+    with pytest.raises(ValueError, match="adblock_enabled"):
+        Settings.from_dict({"adblock_enabled": "yes"})
+
+
+def test_lenient_load_keeps_up_to_seven_mixed_themes(tmp_path):
+    import json
+
+    mix = ["hell", "ruhig", "gothic", "forest", "ocean", "sakura", "papier"]
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"theme": "dunkel", "theme_mix": mix}), encoding="utf-8")
+    assert Settings.load_lenient(path).theme_mix == mix

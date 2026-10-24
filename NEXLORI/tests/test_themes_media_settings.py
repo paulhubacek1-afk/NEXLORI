@@ -177,3 +177,23 @@ def test_theme_combinations_support_eight_palettes_and_reject_nine():
     assert len(combine_themes(names).stripes) >= 8
     with pytest.raises(ValueError, match="höchstens acht"):
         combine_themes(names + ["aurora"])
+
+
+def test_new_light_and_dark_looks_are_available():
+    from nexlori.core.themes import is_light_theme
+
+    light = {"papier", "himmelblau", "salbei", "flieder", "duene", "kirschbluete", "polarlicht-hell"}
+    dark = {"fjord", "nachtfalter", "petrol", "terminal", "retrowelle", "vulkan", "tiefsee", "herbstlaub",
+            "matcha", "oled", "bernstein", "sternennebel", "abendrot"}
+    assert light | dark <= set(BUILTIN_THEMES)
+    assert all(is_light_theme(BUILTIN_THEMES[name]) for name in light)
+    assert not any(is_light_theme(BUILTIN_THEMES[name]) for name in dark)
+    assert len(BUILTIN_THEMES) >= 100
+
+
+def test_builtin_names_never_collide_with_theme_shop_catalog():
+    from pathlib import Path
+
+    catalog = Path(__file__).resolve().parents[1] / "themes" / "catalog.json"
+    names = {item["name"] for item in json.loads(catalog.read_text(encoding="utf-8"))["themes"]}
+    assert not names & set(BUILTIN_THEMES)

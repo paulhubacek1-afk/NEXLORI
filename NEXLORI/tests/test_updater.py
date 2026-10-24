@@ -119,3 +119,60 @@ def test_update_check_rejects_oversized_release_response(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: FakeResponse())
     with pytest.raises(UpdateError, match="unerwartet groß"):
         check_for_update("1.0.0")
+
+
+# ------------------------------------------------------------------ automatische Installation (1.4)
+from nexlori.updater import (  # noqa: E402
+    PENDING_MANIFEST, can_self_update, discard_pending_update, pending_update, start_windows_self_update,
+)
+
+
+def _stage(monkeypatch, tmp_path, version="9.9.9"):
+    payload = b"MZ" + (b"Nexlori pending binary " * 60_000)
+    expected = hashlib.sha256(payload).hexdigest()
+
+    def fake_download(url, target, **kwargs):
+        if url.endswith(".sha256"):
+            target.write_text(f"{expected}  Nexlori.exe\n", encoding="ascii")
+        else:
+            target.write_bytes(payload)
+
+    monkeypatch.setattr("nexlori.updater._download", fake_download)
+    return download_verified_update(release(version), tmp_path)
+
+
+def test_verified_download_records_pending_manifest(monkeypatch, tmp_path):
+    staged = _stage(monkeypatch, tmp_path)
+    assert (tmp_path / PENDING_MANIFEST).exists()
+    pending = pending_update(tmp_path, "1.4.0")
+    assert pending["version"] == "9.9.9"
+    assert pending["path"] == str(staged)
+    assert pending["url"].startswith("https://")
+
+
+def test_pending_update_is_discarded_once_installed(monkeypatch, tmp_path):
+    _stage(monkeypatch, tmp_path, version="1.4.0")
+    assert pending_update(tmp_path, "1.4.0") is None
+    assert not (tmp_path / PENDING_MANIFEST).exists()
+    assert not (tmp_path / "Nexlori.exe.pending").exists()
+
+
+def test_tampered_pending_update_is_never_installed(monkeypatch, tmp_path):
+    staged = _stage(monkeypatch, tmp_path)
+    staged.write_bytes(b"MZ" + b"evil" * 400_000)
+    assert pending_update(tmp_path, "1.4.0") is None
+    assert not staged.exists()
+
+
+def test_missing_or_broken_manifest_cleans_up(tmp_path):
+    (tmp_path / "Nexlori.exe.pending").write_bytes(b"x")
+    assert pending_update(tmp_path, "1.0.0") is None
+    assert not (tmp_path / "Nexlori.exe.pending").exists()
+    (tmp_path / PENDING_MANIFEST).write_text("{}", encoding="utf-8")
+    assert pending_update(tmp_path, "1.0.0") is None
+    discard_pending_update(tmp_path)
+
+
+def test_self_update_is_only_possible_for_the_frozen_windows_exe(tmp_path):
+    assert can_self_update(tmp_path / "Nexlori.exe") is False  # Tests laufen nicht als gefrorene EXE
+    assert start_windows_self_update(tmp_path / "x", "https://example.test", target_exe=tmp_path / "Nexlori.exe") is False

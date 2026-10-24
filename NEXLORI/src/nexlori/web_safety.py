@@ -74,20 +74,6 @@ _KNOWN_LOCAL_HOSTS = {
 }
 
 
-def is_nsfw_url(url: str) -> bool:
-    """Return True for known adult domains and explicit URL path/query markers."""
-    try:
-        parts = urlsplit(str(url).strip())
-        host = (parts.hostname or "").casefold().rstrip(".")
-    except ValueError:
-        return False
-    if not host:
-        return False
-    if any(host == domain or host.endswith("." + domain) for domain in _BLOCKED_HOSTS):
-        return True
-    searchable = host + parts.path + "?" + parts.query
-    return bool(_ADULT_TOKEN.search(searchable))
-
 
 def normalize_home_target(value: str) -> str:
     """Validate and normalize a LAN device address without allowing credentials or public hosts."""

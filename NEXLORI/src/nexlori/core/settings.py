@@ -12,6 +12,9 @@ from .media import CORNERS, SIZES
 from .modes import Mode
 from .builtin_addons import ADDON_IDS, default_states
 from .themes import BUILTIN_THEMES, is_known_theme
+from .adblock import FILTER_LIST_IDS, normalize_host
+
+TOOLBAR_ICONS = ("home", "bookmark", "shield", "spotify", "page_theme", "theme")
 
 
 DEFAULT_SEARCH_URL = "https://duckduckgo.com/?q={}"
@@ -47,9 +50,14 @@ class Settings:
     toolbar_search_width: int = 560
     toolbar_icon_size: int = 18
     toolbar_visible_icons: list[str] = field(
-        default_factory=lambda: ["home", "bookmark", "spotify", "page_theme", "theme"]
+        default_factory=lambda: ["home", "bookmark", "shield", "spotify", "page_theme", "theme"]
     )
     auto_update_check: bool = True
+    auto_update_install: bool = True  # geprüfte Updates im Hintergrund laden und beim Beenden installieren
+    adblock_enabled: bool = True  # Nexlori Shield: eingebauter Werbe- und Trackerblocker
+    adblock_cosmetic: bool = True  # Werbeflächen per CSS ausblenden, YouTube-Werbung überspringen
+    adblock_allowlist: list[str] = field(default_factory=list)  # Websites, auf denen Shield pausiert
+    adblock_lists: list[str] = field(default_factory=lambda: ["pgl"])
     memory_saver: bool = True  # entlädt inaktive Tabs, um RAM freizugeben
     ubol_enabled: bool = True
     allow_web_popups: bool = False
@@ -98,14 +106,17 @@ class Settings:
             out.append("toolbar_search_width: zwischen 360 und 1000 erwartet")
         if not isinstance(self.toolbar_icon_size, int) or not 14 <= self.toolbar_icon_size <= 30:
             out.append("toolbar_icon_size: zwischen 14 und 30 erwartet")
-        valid_icons = {"home", "bookmark", "spotify", "page_theme", "theme"}
+        valid_icons = set(TOOLBAR_ICONS)
         if (
             not isinstance(self.toolbar_visible_icons, list)
             or len(set(self.toolbar_visible_icons)) != len(self.toolbar_visible_icons)
             or any(icon not in valid_icons for icon in self.toolbar_visible_icons)
         ):
             out.append("toolbar_visible_icons: ungültige oder doppelte Icons")
-        for field_name in ("auto_update_check", "memory_saver", "ubol_enabled", "allow_web_popups", "background_on_close", "block_nsfw"):
+        for field_name in (
+            "auto_update_check", "auto_update_install", "memory_saver", "ubol_enabled", "allow_web_popups",
+            "background_on_close", "block_nsfw", "adblock_enabled", "adblock_cosmetic",
+        ):
             if not isinstance(getattr(self, field_name), bool):
                 out.append(f"{field_name}: true oder false erwartet")
         if (
@@ -113,6 +124,18 @@ class Settings:
             or any(not isinstance(key, str) or not isinstance(value, bool) for key, value in self.extensions_enabled.items())
         ):
             out.append("extensions_enabled: erwartet wird ein Wörterbuch aus Add-on-Namen und booleschem Status")
+        if (
+            not isinstance(self.adblock_allowlist, list)
+            or len(self.adblock_allowlist) > 500
+            or any(not isinstance(h, str) or not normalize_host(h) or len(h) > 253 for h in self.adblock_allowlist)
+        ):
+            out.append("adblock_allowlist: erwartet wird eine Liste von Hostnamen")
+        if (
+            not isinstance(self.adblock_lists, list)
+            or any(item not in FILTER_LIST_IDS for item in self.adblock_lists)
+            or len(set(self.adblock_lists)) != len(self.adblock_lists)
+        ):
+            out.append("adblock_lists: nur bekannte, eindeutige Filterlisten erlaubt")
         if self.animations not in ("full", "reduced", "off"):
             out.append(f"animations: 'full', 'reduced' oder 'off' erwartet ({self.animations!r})")
         if not isinstance(self.custom_titlebar, bool):
@@ -140,6 +163,10 @@ class Settings:
             merged = default_states()
             merged.update({k: v for k, v in values["builtin_addons"].items() if k in ADDON_IDS})
             values["builtin_addons"] = merged
+        icons = values.get("toolbar_visible_icons")
+        if isinstance(icons, list) and "adblock_enabled" not in data and "shield" not in icons:
+            # Einstellungen aus Versionen vor 1.4: den neuen Shield-Knopf einmalig einblenden.
+            values["toolbar_visible_icons"] = [*icons, "shield"]
         settings = cls(**values)
         problems = settings.problems()
         if problems:
@@ -166,7 +193,9 @@ class Settings:
             data["theme"] = "dunkel"
         mix = data.get("theme_mix")
         if isinstance(mix, list):
-            data["theme_mix"] = [n for n in mix if is_known_theme(n) and n != data.get("theme", "dunkel")][:3]
+            data["theme_mix"] = list(dict.fromkeys(
+                n for n in mix if is_known_theme(n) and n != data.get("theme", "dunkel")
+            ))[:7]
         return cls.from_dict(data)
 
     def save(self, path: str | Path) -> None:
