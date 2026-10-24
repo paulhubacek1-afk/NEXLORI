@@ -111,7 +111,7 @@ small {{ display:block; opacity:.68; margin-top:7px; line-height:1.45; }}
 <a class="tile" href="nexlori://addons"><span class="tile-icon">＋</span><strong>Add-ons</strong><small>Erweiterungen entdecken und verwalten</small></a>
 <a class="tile" href="nexlori://home-network"><span class="tile-icon">⌂</span><strong>Heimnetz</strong><small>Router, NAS, Drucker und Smart Home</small></a>
 <a class="tile" href="nexlori://settings"><span class="tile-icon">✦</span><strong>Dein Nexlori</strong><small>Themes, Suchmaschine und Einstellungen</small></a>
-</div><section class="projects-section"><h2 class="section-title">Meine Online-Projekte</h2><div class="project-grid">{project_markup}</div></section><div class="foot">Nexlori · Chromium-WebEngine · Schutz und Einstellungen bleiben lokal.</div>
+</div>{('<section class="projects-section"><h2 class="section-title">Meine Online-Projekte</h2><div class="project-grid">' + project_markup + '</div></section>') if project_markup else ''}<div class="foot">Nexlori · Chromium-WebEngine · Schutz und Einstellungen bleiben lokal.</div>
 <script>
 const template = {search_template};
 document.getElementById('search').addEventListener('submit', function(e) {{
