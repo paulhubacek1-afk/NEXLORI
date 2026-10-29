@@ -205,7 +205,7 @@ jobs:
             NEXLORI/dist/Nexlori-Setup.exe
             NEXLORI/dist/UBOL-LICENSE.txt
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
 
   release:
     name: GitHub-Release erstellen oder aktualisieren
