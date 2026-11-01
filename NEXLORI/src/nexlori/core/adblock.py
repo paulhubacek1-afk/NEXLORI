@@ -339,17 +339,17 @@ def build_cosmetic_script(*, allowlisted_hosts: Iterable[str] = ()) -> str:
     (document.head || root).appendChild(style);
     if (!/(^|\\.)youtube\\.com$/.test(host)) return;
     const skip = () => {{
-    const player = document.querySelector('.html5-video-player');
-    const button = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
-    if (button) button.click();
-    if (player && player.classList.contains('ad-showing')) {{
-      const video = player.querySelector('video');
-      if (video && isFinite(video.duration) && video.duration > 0) {{
-        video.muted = true;
-        video.currentTime = Math.max(0, video.duration - 0.1);
+      const player = document.querySelector('.html5-video-player');
+      const button = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
+      if (button) button.click();
+      if (player && player.classList.contains('ad-showing')) {{
+        const video = player.querySelector('video');
+        if (video && isFinite(video.duration) && video.duration > 0) {{
+          video.muted = true;
+          video.currentTime = Math.max(0, video.duration - 0.1);
+        }}
       }}
-    }}
-  }};
+    }};
     new MutationObserver(skip).observe(root, {{ subtree: true, childList: true, attributes: true, attributeFilter: ['class'] }});
     setInterval(skip, 700);
   }};
