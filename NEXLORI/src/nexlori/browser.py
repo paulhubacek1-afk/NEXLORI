@@ -25,7 +25,7 @@ _PATH_RE = re.compile(r"^([A-Za-z]:[\\/]|/|\\\\|~)")
 
 def compatible_webengine_user_agent(user_agent: str) -> str:
     """Remove the QtWebEngine token while preserving the actual Chromium version."""
-    return re.sub(r"\\s+QtWebEngine/[^\\s]+", "", str(user_agent or "")).strip()
+    return re.sub(r"\s+QtWebEngine/[^\s]+", "", str(user_agent or "")).strip()
 
 
 # ----------------------------------------------------------------------------- Adressen
