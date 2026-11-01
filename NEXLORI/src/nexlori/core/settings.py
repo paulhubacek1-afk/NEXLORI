@@ -160,7 +160,9 @@ class Settings:
         values = {k: v for k, v in data.items() if k in known}  # unbekannte Schlüssel ignorieren
         # uBlock Origin Lite nutzt eine Chrome-WebExtensions-API, die Qt WebEngine
         # nicht vollständig bereitstellt. Alte Profile daher sicher deaktivieren.
-        values["ubol_enabled"] = False
+        legacy_ubol_enabled = values.get("ubol_enabled", False)
+        if isinstance(legacy_ubol_enabled, bool):
+            values["ubol_enabled"] = False
         extension_states = values.get("extensions_enabled")
         if isinstance(extension_states, dict) and all(
             isinstance(state, bool) for state in extension_states.values()
