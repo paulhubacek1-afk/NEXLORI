@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtWebEngineCore import (
     QWebEngineDownloadRequest,
     QWebEnginePage,
+    QWebEnginePermission,
     QWebEngineProfile,
     QWebEngineScript,
     QWebEngineSettings,
@@ -83,8 +84,6 @@ from .tabstrip import TabStrip
 from .titlebar import DialogThemer, ResizeFrame, TitleBar, apply_native_titlebar_colors
 from .web_safety import addons_page_html, error_page_html, home_network_page_html, is_nsfw_url, normalize_home_target
 from .extension_utils import (
-    bundled_ubolite_path,
-    unpack_extension_package,
     extension_key_from_info,
     extension_key_from_name,
     extension_name_from_info,
@@ -99,6 +98,11 @@ from .updater import (
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
+
+
+def compatible_webengine_user_agent(user_agent: str) -> str:
+    """Remove the QtWebEngine product token while keeping the real Chromium version."""
+    return re.sub(r"\\s+QtWebEngine/[^\\s]+", "", str(user_agent or "")).strip()
 SEARCH_PROVIDERS = {
     "DuckDuckGo": "https://duckduckgo.com/?q={}",
     "Google": "https://www.google.com/search?q={}",
@@ -338,6 +342,7 @@ class BrowserPage(QWebEnginePage):
         super().__init__(profile, parent)
         self.owner = owner
         self._https_origin: str | None = None  # ursprüngliche http-Adresse, solange der https-Versuch läuft
+        self.permissionRequested.connect(owner._handle_site_permission)
 
     def createWindow(self, _window_type):  # noqa: N802
         # Website popups can be blocked or opened in a Nexlori tab from Settings.
@@ -417,6 +422,9 @@ class NexloriWindow(QMainWindow):
         self.theme = combine_themes([settings.theme, *settings.theme_mix])
 
         self.profile = QWebEngineProfile("Nexlori", self)
+        # Some websites reject embedded Qt WebEngine browsers even though Chromium is current.
+        # Keep the actual Chromium version but do not advertise the QtWebEngine product token.
+        self.profile.setHttpUserAgent(compatible_webengine_user_agent(self.profile.httpUserAgent()))
         self.profile.setPersistentStoragePath(str(self.storage_dir))
         self.profile.setCachePath(str(self.cache_dir))
         self.profile.setPersistentCookiesPolicy(
@@ -461,7 +469,6 @@ class NexloriWindow(QMainWindow):
         if start_url:
             self.navigate_view(view, start_url)
         # Netzwerk-/Erweiterungsarbeit verzögert starten, damit das Browserfenster zuerst bedienbar ist.
-        QTimer.singleShot(3200, self._ensure_default_extension)
         QTimer.singleShot(1500, self._load_shield_lists)
         QTimer.singleShot(4000, self._restore_pending_update)
         self._update_timer = QTimer(self)
@@ -1744,43 +1751,6 @@ QPushButton:disabled {{ color:{muted}; }}
         path.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
-    def _ensure_default_extension(self) -> None:
-        """Install the bundled official uBlock Origin Lite package for a fresh profile."""
-        if self.extension_manager is None:
-            self.statusBar().showMessage(
-                "Add-ons benötigen Qt WebEngine 6.10 oder neuer.", 6000
-            )
-            return
-        try:
-            extensions = list(self.extension_manager.extensions())
-        except (AttributeError, RuntimeError):
-            extensions = []
-        installed = any(
-            extension_key_from_info(ext) == "ublock-origin-lite"
-            and bool(ext.isInstalled())
-            for ext in extensions
-        )
-        if installed:
-            self._sync_extension_states()
-            return
-        package = bundled_ubolite_path()
-        if package is None:
-            self.statusBar().showMessage(
-                "uBlock Origin Lite fehlt in diesem Build. Du kannst ein MV3-Add-on manuell installieren.",
-                7000,
-            )
-            return
-        try:
-            # Qt WebEngine's extension API accepts an unpacked extension directory,
-            # not the ZIP archive bundled with Nexlori. Unpack the already verified
-            # archive into the persistent profile before calling the native API.
-            extension_dir = self.storage_dir / "extensions" / "ublock-origin-lite"
-            unpacked = unpack_extension_package(package, extension_dir)
-            self.statusBar().showMessage("uBlock Origin Lite wird zum ersten Mal eingerichtet …", 6000)
-            self.extension_manager.installExtension(str(unpacked))
-        except Exception as exc:  # noqa: BLE001
-            self.statusBar().showMessage(f"uBlock Origin Lite konnte nicht installiert werden: {exc}", 8000)
-
     def _on_extension_installed(self, extension) -> None:
         """Persist the requested state, then enable it after Qt leaves its install callback."""
         try:
@@ -1790,7 +1760,7 @@ QPushButton:disabled {{ color:{muted}; }}
                 return
             name = extension_name_from_info(extension)
             key = extension_key_from_name(name)
-            enabled = bool(self.settings.ubol_enabled) if key == "ublock-origin-lite" else True
+            enabled = False if key == "ublock-origin-lite" else True
             self.settings.extensions_enabled[key] = enabled
             if key == "ublock-origin-lite":
                 self.settings.ubol_enabled = enabled
@@ -1831,7 +1801,7 @@ QPushButton:disabled {{ color:{muted}; }}
                 if not key or is_builtin_extension(extension_name):
                     continue
                 if key == "ublock-origin-lite":
-                    enabled = bool(self.settings.ubol_enabled)
+                    enabled = False
                 else:
                     enabled = bool(self.settings.extensions_enabled.get(key, False))
                 if bool(extension.isEnabled()) != enabled:
@@ -1844,6 +1814,11 @@ QPushButton:disabled {{ color:{muted}; }}
             raise RuntimeError("Qt WebEngine unterstützt in diesem Build keine Erweiterungen.")
         name = extension_name_from_info(extension)
         key = extension_key_from_name(name)
+        if key == "ublock-origin-lite":
+            raise RuntimeError(
+                "uBlock Origin Lite wird in dieser Nexlori-Version nicht als funktionsfähig unterstützt. "
+                "Verwende den eingebauten Nexlori Shield."
+            )
         self.extension_manager.setExtensionEnabled(extension, bool(enabled))
         self.settings.extensions_enabled[key] = bool(enabled)
         if key == "ublock-origin-lite":
@@ -1888,8 +1863,6 @@ QPushButton:disabled {{ color:{muted}; }}
         shield.setChecked(self.settings.adblock_enabled)
         shield_cosmetic = QCheckBox("Werbeflächen ausblenden und YouTube-Werbung überspringen", dialog)
         shield_cosmetic.setChecked(self.settings.adblock_cosmetic)
-        ubol = QCheckBox("Zusätzlich uBlock Origin Lite verwenden (Erweiterung)", dialog)
-        ubol.setChecked(self.settings.ubol_enabled)
         updates = QCheckBox("Automatisch nach Updates suchen (beim Start und alle 6 Stunden)", dialog)
         updates.setChecked(self.settings.auto_update_check)
         auto_install = QCheckBox("Updates automatisch herunterladen und beim Beenden installieren", dialog)
@@ -1938,7 +1911,6 @@ QPushButton:disabled {{ color:{muted}; }}
         form.addRow("Website-Farben", theme_css)
         form.addRow("Werbe- und Trackerschutz", shield)
         form.addRow("", shield_cosmetic)
-        form.addRow("", ubol)
         form.addRow("Updates", updates)
         form.addRow("", auto_install)
         form.addRow("Pop-ups", popups)
@@ -1973,7 +1945,6 @@ QPushButton:disabled {{ color:{muted}; }}
             return
 
         self.settings.adapt_page_theme = theme_css.isChecked()
-        self.settings.ubol_enabled = ubol.isChecked()
         self.settings.auto_update_check = updates.isChecked()
         self.settings.auto_update_install = auto_install.isChecked()
         shield_changed = (
@@ -1993,7 +1964,6 @@ QPushButton:disabled {{ color:{muted}; }}
         self.settings.background_on_close = background.isChecked()
         self.settings.page_zoom = float(zoom.value())
         self.settings.search_url = canonical_search_url(str(search_engine.currentData()))
-        self.settings.extensions_enabled["ublock-origin-lite"] = self.settings.ubol_enabled
         self.settings.animations = str(animations.currentData())
         self.motion = Motion(self.settings.animations)
         self.accent_line.set_flow(self.motion.continuous)
@@ -2038,6 +2008,50 @@ QPushButton:disabled {{ color:{muted}; }}
             )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Standardbrowser", f"Nexlori konnte nicht registriert werden: {exc}")
+
+    def _handle_site_permission(self, permission: QWebEnginePermission) -> None:
+        """Ask before a website can use the microphone, camera or browser notifications."""
+        try:
+            if not permission.isValid():
+                permission.deny()
+                return
+            origin = permission.origin()
+            scheme = origin.scheme().lower()
+            host = origin.host().lower()
+            local_http = scheme == "http" and host in {"localhost", "127.0.0.1", "::1"}
+            if scheme != "https" and not local_http:
+                permission.deny()
+                return
+
+            permission_type = permission.permissionType()
+            labels = {
+                QWebEnginePermission.PermissionType.MediaAudioCapture: "Mikrofon",
+                QWebEnginePermission.PermissionType.MediaVideoCapture: "Kamera",
+                QWebEnginePermission.PermissionType.MediaAudioVideoCapture: "Mikrofon und Kamera",
+                QWebEnginePermission.PermissionType.Notifications: "Browser-Benachrichtigungen",
+            }
+            label = labels.get(permission_type)
+            if label is None:
+                permission.deny()
+                return
+
+            answer = QMessageBox.question(
+                self,
+                "Website-Berechtigung",
+                f"{origin.toString()} möchte Zugriff auf {label}.\\n\\n"
+                "Nur erlauben, wenn du diese Website kennst und die Funktion gerade benötigst.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                permission.grant()
+            else:
+                permission.deny()
+        except (AttributeError, RuntimeError):
+            try:
+                permission.deny()
+            except RuntimeError:
+                pass
 
     def _offer_save_credentials(self, view: QWebEngineView, username: str, password: str) -> None:
         """Ask before saving a password submitted through a secure, same-origin login form."""
@@ -2964,39 +2978,6 @@ QPushButton:disabled {{ color:{muted}; }}
             self.settings.save(self.settings_path)
         except (OSError, ValueError):
             self.statusBar().showMessage("Einstellungen konnten nicht gespeichert werden.", 3000)
-
-
-
-def _selftest_ubol_package() -> tuple[bool, str]:
-    """Verify the bundled uBlock Origin Lite archive without starting extension subprocesses.
-
-    Qt WebEngine's extension runtime has native Chromium subprocesses; the EXE packaging
-    smoke test must not install/enable extensions and then tear their profile down in the
-    same short-lived test process. The package itself is hash-checked at build time and
-    its manifest/identity are checked again here.
-    """
-    import hashlib
-
-    from .extension_utils import UBOLITE_SHA256, bundled_ubolite_path, inspect_extension_package
-
-    package = bundled_ubolite_path()
-    if package is None:
-        return False, "Das geprüfte uBlock-Origin-Lite-Paket fehlt."
-    digest = hashlib.sha256()
-    try:
-        with package.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        actual = digest.hexdigest()
-        if actual.lower() != UBOLITE_SHA256.lower():
-            return False, "SHA-256-Prüfsumme des eingebauten uBlock-Origin-Lite-Pakets stimmt nicht."
-        details = inspect_extension_package(package)
-        name = str(details.get("name") or "")
-        if details.get("manifest_version") != 3 or "ublock" not in name.casefold():
-            return False, "Das Paket ist keine gültige Manifest-V3-Version von uBlock Origin Lite."
-        return True, f"{name} {details.get('version', '')} · Manifest V3 und SHA-256 geprüft"
-    except Exception as exc:  # noqa: BLE001
-        return False, f"{type(exc).__name__}: {exc}"
 
 
 
