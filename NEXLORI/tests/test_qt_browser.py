@@ -1,4 +1,5 @@
 from nexlori.core.themes import BUILTIN_THEMES, page_theme_css
+from nexlori.browser import compatible_webengine_user_agent
 
 
 def test_requested_themes_are_available():
@@ -46,3 +47,12 @@ def test_page_theme_is_preserved_for_every_navigation():
     disabled = build_page_theme_script(BUILTIN_THEMES["gothic"], False)
     assert "enabled:false" in disabled
     assert "old.remove()" in disabled
+
+
+
+def test_compatible_user_agent_keeps_real_chromium_and_removes_qt_token():
+    source = "Mozilla/5.0 AppleWebKit/537.36 QtWebEngine/6.12.0 Chrome/140.0.0.0 Safari/537.36"
+    result = compatible_webengine_user_agent(source)
+    assert "QtWebEngine/" not in result
+    assert "Chrome/140.0.0.0" in result
+    assert "AppleWebKit/537.36" in result

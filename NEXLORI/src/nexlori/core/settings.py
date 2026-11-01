@@ -59,11 +59,11 @@ class Settings:
     adblock_allowlist: list[str] = field(default_factory=list)  # Websites, auf denen Shield pausiert
     adblock_lists: list[str] = field(default_factory=lambda: ["pgl"])
     memory_saver: bool = True  # entlädt inaktive Tabs, um RAM freizugeben
-    ubol_enabled: bool = True
+    ubol_enabled: bool = False
     allow_web_popups: bool = False
     background_on_close: bool = True  # Schließen blendet ins Tray aus; Nexlori bleibt im Hintergrund aktiv
     block_nsfw: bool = True  # lokaler URL-Filter, standardmäßig aktiv
-    extensions_enabled: dict[str, bool] = field(default_factory=lambda: {"ublock-origin-lite": True})
+    extensions_enabled: dict[str, bool] = field(default_factory=lambda: {"ublock-origin-lite": False})
     animations: str = "full"  # "full" | "reduced" | "off"
     custom_titlebar: bool = True  # eigene Titelleiste in Theme-Farben (False = Windows-Standardleiste)
     builtin_addons: dict[str, bool] = field(default_factory=default_states)
@@ -158,6 +158,18 @@ class Settings:
     def from_dict(cls, data: dict) -> "Settings":
         known = {f.name for f in fields(cls)}
         values = {k: v for k, v in data.items() if k in known}  # unbekannte Schlüssel ignorieren
+        # uBlock Origin Lite nutzt eine Chrome-WebExtensions-API, die Qt WebEngine
+        # nicht vollständig bereitstellt. Alte Profile daher sicher deaktivieren.
+        legacy_ubol_enabled = values.get("ubol_enabled", False)
+        if isinstance(legacy_ubol_enabled, bool):
+            values["ubol_enabled"] = False
+        extension_states = values.get("extensions_enabled")
+        if isinstance(extension_states, dict) and all(
+            isinstance(state, bool) for state in extension_states.values()
+        ):
+            extension_states = dict(extension_states)
+            extension_states["ublock-origin-lite"] = False
+            values["extensions_enabled"] = extension_states
         if isinstance(values.get("builtin_addons"), dict):
             # Neue Add-ons erhalten ihre Standardwerte, unbekannte (z. B. aus einer neueren Version) fallen weg.
             merged = default_states()

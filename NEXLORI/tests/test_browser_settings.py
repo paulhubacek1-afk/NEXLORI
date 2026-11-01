@@ -4,7 +4,7 @@ from nexlori.core.settings import DEFAULT_SEARCH_URL, Settings, canonical_search
 def test_addon_and_browser_preferences_roundtrip(tmp_path):
     path = tmp_path / "settings.json"
     settings = Settings()
-    assert settings.ubol_enabled is True
+    assert settings.ubol_enabled is False
     assert settings.auto_update_check is True
     assert settings.allow_web_popups is False
     assert settings.background_on_close is True
@@ -29,6 +29,25 @@ def test_addon_and_browser_preferences_roundtrip(tmp_path):
         "dark-reader": True,
     }
     assert saved.problems() == []
+
+
+def test_legacy_profiles_disable_unverified_ublock_lite():
+    migrated = Settings.from_dict({
+        "ubol_enabled": True,
+        "extensions_enabled": {"ublock-origin-lite": True, "dark-reader": True},
+    })
+    assert migrated.ubol_enabled is False
+    assert migrated.extensions_enabled == {
+        "ublock-origin-lite": False,
+        "dark-reader": True,
+    }
+
+
+def test_invalid_legacy_ublock_setting_is_rejected():
+    import pytest
+
+    with pytest.raises(ValueError, match="ubol_enabled"):
+        Settings.from_dict({"ubol_enabled": "yes"})
 
 
 def test_invalid_extension_enabled_value_is_rejected():
