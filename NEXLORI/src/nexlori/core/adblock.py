@@ -395,8 +395,12 @@ class FilterListStore:
         for item in FILTER_LISTS:
             entry = data.get(item.id) if isinstance(data.get(item.id), dict) else {}
             fetched = entry.get("fetched", 0)
-            if isinstance(fetched, bool) or not isinstance(fetched, (int, float)) or not math.isfinite(fetched):
-                fetched = 0
+            try:
+                fetched = float(fetched) if not isinstance(fetched, bool) else 0.0
+            except (TypeError, ValueError, OverflowError):
+                fetched = 0.0
+            if not math.isfinite(fetched):
+                fetched = 0.0
             out[item.id] = {
                 "fetched": float(fetched),
                 "count": len(entry.get("domains", [])) if isinstance(entry.get("domains"), list) else 0,
