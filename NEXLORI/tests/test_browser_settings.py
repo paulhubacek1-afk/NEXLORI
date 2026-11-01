@@ -43,6 +43,13 @@ def test_legacy_profiles_disable_unverified_ublock_lite():
     }
 
 
+def test_invalid_legacy_ublock_setting_is_rejected():
+    import pytest
+
+    with pytest.raises(ValueError, match="ubol_enabled"):
+        Settings.from_dict({"ubol_enabled": "yes"})
+
+
 def test_invalid_extension_enabled_value_is_rejected():
     try:
         Settings.from_dict({"extensions_enabled": {"ublock-origin-lite": "yes"}})
