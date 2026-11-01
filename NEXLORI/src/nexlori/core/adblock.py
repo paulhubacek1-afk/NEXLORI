@@ -14,6 +14,7 @@ Dieses Modul hat bewusst keine Qt-Abhängigkeit, damit es vollständig testbar b
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import tempfile
@@ -259,8 +260,15 @@ class AdBlocker:
         if first_segment and any(f"{suffix}/{first_segment}" in domains for suffix in (host, *_suffixes(host))):
             return "path"
         for rule_host, rule_path in _PATH_RULES:
-            if (host == rule_host or host.endswith("." + rule_host)) and path.startswith(rule_path):
-                return "path"
+            if host == rule_host or host.endswith("." + rule_host):
+                # Prefix rules ending in / or _ intentionally match variable IDs.
+                # Other rules must end on a path boundary (e.g. /tr, not /travel).
+                if rule_path.endswith(("/", "_")):
+                    matched = path.startswith(rule_path)
+                else:
+                    matched = path == rule_path or path.startswith(rule_path + "/")
+                if matched:
+                    return "path"
         return None
 
     def matches(self, url: str) -> bool:
@@ -319,13 +327,18 @@ def build_cosmetic_script(*, allowlisted_hosts: Iterable[str] = ()) -> str:
   const host = (location.hostname || '').toLowerCase();
   const allow = {allow};
   if (allow.some(a => host === a || host.endsWith('.' + a))) return;
-  const style = document.createElement('style');
-  style.id = 'nexlori-shield-css';
-  style.textContent = {css};
-  const attach = () => (document.head || document.documentElement).appendChild(style);
-  if (document.documentElement) attach(); else document.addEventListener('DOMContentLoaded', attach, {{ once: true }});
-  if (!/(^|\\.)youtube\\.com$/.test(host)) return;
-  const skip = () => {{
+  const start = () => {{
+    const root = document.documentElement;
+    if (!root) {{
+      document.addEventListener('DOMContentLoaded', start, {{ once: true }});
+      return;
+    }}
+    const style = document.createElement('style');
+    style.id = 'nexlori-shield-css';
+    style.textContent = {css};
+    (document.head || root).appendChild(style);
+    if (!/(^|\\.)youtube\\.com$/.test(host)) return;
+    const skip = () => {{
     const player = document.querySelector('.html5-video-player');
     const button = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
     if (button) button.click();
@@ -337,8 +350,10 @@ def build_cosmetic_script(*, allowlisted_hosts: Iterable[str] = ()) -> str:
       }}
     }}
   }};
-  new MutationObserver(skip).observe(document.documentElement, {{ subtree: true, childList: true, attributes: true, attributeFilter: ['class'] }});
-  setInterval(skip, 700);
+    new MutationObserver(skip).observe(root, {{ subtree: true, childList: true, attributes: true, attributeFilter: ['class'] }});
+    setInterval(skip, 700);
+  }};
+  start();
 }})();
 """
 
@@ -379,8 +394,11 @@ class FilterListStore:
         out = {}
         for item in FILTER_LISTS:
             entry = data.get(item.id) if isinstance(data.get(item.id), dict) else {}
+            fetched = entry.get("fetched", 0)
+            if isinstance(fetched, bool) or not isinstance(fetched, (int, float)) or not math.isfinite(fetched):
+                fetched = 0
             out[item.id] = {
-                "fetched": float(entry.get("fetched", 0) or 0),
+                "fetched": float(fetched),
                 "count": len(entry.get("domains", [])) if isinstance(entry.get("domains"), list) else 0,
             }
         return out
@@ -393,7 +411,7 @@ class FilterListStore:
             if list_id not in FILTER_LIST_IDS:
                 continue
             fetched = info.get(list_id, {}).get("fetched", 0)
-            if not fetched or now - fetched > LIST_REFRESH_SECONDS:
+            if not fetched or fetched > now or now - fetched > LIST_REFRESH_SECONDS:
                 stale.append(list_id)
         return stale
 
@@ -401,7 +419,17 @@ class FilterListStore:
         if list_id not in FILTER_LIST_IDS:
             raise FilterListError(f"Unbekannte Filterliste: {list_id}")
         data = self._read()
-        data[list_id] = {"fetched": time.time() if now is None else now, "domains": sorted(domains)}
+        clean_domains = {
+            normalize_host(domain)
+            for domain in domains
+            if isinstance(domain, str)
+            and normalize_host(domain) not in _NEVER_BLOCK
+            and _DOMAIN_RE.fullmatch(normalize_host(domain))
+        }
+        data[list_id] = {
+            "fetched": time.time() if now is None else now,
+            "domains": sorted(clean_domains),
+        }
         self.directory.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=self.directory, suffix=".tmp")
         try:
