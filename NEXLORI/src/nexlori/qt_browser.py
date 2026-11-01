@@ -66,7 +66,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebChannel import QWebChannel
 
 from . import __version__
-from .browser import normalize_input
+from .browser import compatible_webengine_user_agent, normalize_input
 from .core.settings import Settings, canonical_search_url, default_settings_path
 from .animations import AccentLine, Motion, animate_progress, cascade_in, crossfade
 from .core.adblock import (
@@ -98,11 +98,6 @@ from .updater import (
 
 APP_NAME = "Nexlori"
 APP_VERSION = __version__
-
-
-def compatible_webengine_user_agent(user_agent: str) -> str:
-    """Remove the QtWebEngine product token while keeping the real Chromium version."""
-    return re.sub(r"\s+QtWebEngine/[^\s]+", "", str(user_agent or "")).strip()
 
 
 SEARCH_PROVIDERS = {
