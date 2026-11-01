@@ -27,6 +27,7 @@ from .extension_utils import (
     extension_name_from_info,
     inspect_extension_package,
     is_builtin_extension,
+    unpack_extension_package,
   )
 
 _MORE_ADDON_SOURCES = (
@@ -201,7 +202,10 @@ class ExtensionsDialog(QDialog):
         ) != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.manager.installExtension(str(Path(path).resolve()))
+            extension_key = extension_key_from_name(details["name"])
+            destination = self.owner.storage_dir / "extensions" / extension_key
+            unpacked_path = unpack_extension_package(path, destination)
+            self.manager.installExtension(str(unpacked_path))
             self.owner.statusBar().showMessage(f"Installation gestartet: {details['name']}", 4000)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Installation fehlgeschlagen", str(exc))
