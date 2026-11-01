@@ -162,7 +162,9 @@ class Settings:
         # nicht vollständig bereitstellt. Alte Profile daher sicher deaktivieren.
         values["ubol_enabled"] = False
         extension_states = values.get("extensions_enabled")
-        if isinstance(extension_states, dict):
+        if isinstance(extension_states, dict) and all(
+            isinstance(state, bool) for state in extension_states.values()
+        ):
             extension_states = dict(extension_states)
             extension_states["ublock-origin-lite"] = False
             values["extensions_enabled"] = extension_states
