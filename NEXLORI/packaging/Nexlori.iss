@@ -32,7 +32,6 @@ Uninstallable=yes
 
 [Files]
 Source: "..\dist\Nexlori.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\src\nexlori\vendor\UBOL-LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Nexlori"; Filename: "{app}\Nexlori.exe"; IconFilename: "{app}\Nexlori.exe"; Comment: "Nexlori Browser"
