@@ -1,5 +1,5 @@
 from nexlori.core.themes import BUILTIN_THEMES, page_theme_css
-from nexlori.qt_browser import compatible_webengine_user_agent
+from nexlori.browser import compatible_webengine_user_agent
 
 
 def test_requested_themes_are_available():
