@@ -38,7 +38,6 @@ def selftest(out_path: str | None = None) -> int:
         _write(out_path, f"FEHLER Tk: {type(exc).__name__}: {exc}")
         return 3
     _write(out_path, "CHECK: renderer and Tk passed; testing Chromium WebEngine")
-    _write(out_path, "CHECK: renderer and Tk passed; testing Chromium WebEngine")
     try:
         from .qt_browser import _selftest_webengine
 
