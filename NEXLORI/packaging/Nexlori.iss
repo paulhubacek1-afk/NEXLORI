@@ -1,6 +1,6 @@
 ; Nexlori Windows installer. Builds from dist/Nexlori.exe after PyInstaller completes.
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.4.1"
 #endif
 
 [Setup]
