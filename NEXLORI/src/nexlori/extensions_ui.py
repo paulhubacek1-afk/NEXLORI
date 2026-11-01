@@ -48,9 +48,10 @@ class ExtensionsDialog(QDialog):
         root = QVBoxLayout(self)
 
         intro = QLabel(
-            "uBlock Origin Lite ist in Nexlori enthalten und standardmäßig aktiviert. "
-            "Weitere Chrome-kompatible Erweiterungen können als Manifest-V3-ZIP oder entpackter Ordner "
-            "installiert werden. Prüfe Herausgeber und Berechtigungen vor jeder Installation.",
+            "Nexlori Shield blockiert Werbung und Tracker direkt im Browser. "
+            "Die Chrome-Erweiterungs-API von Qt WebEngine unterstützt nicht alle Erweiterungsfunktionen; "
+            "uBlock Origin Lite wird deshalb nicht installiert. Andere kompatible Manifest-V3-Add-ons "
+            "kannst du als ZIP oder entpackten Ordner hinzufügen. Prüfe Herausgeber und Berechtigungen.",
             self,
         )
         intro.setWordWrap(True)
@@ -232,13 +233,6 @@ class ExtensionsDialog(QDialog):
             return
         name = str(extension.name() or "dieses Add-on")
         key = extension_key_from_name(name)
-        if key == "ublock-origin-lite":
-            QMessageBox.information(
-                self, "uBlock Origin Lite",
-                "uBlock Origin Lite gehört zur Nexlori-Standardausstattung. Du kannst es hier deaktivieren, "
-                "aber nicht versehentlich aus der Installation entfernen.",
-            )
-            return
         if QMessageBox.question(
             self, "Add-on entfernen",
             f"„{name}“ aus Nexlori entfernen? Das Add-on wird nicht gelöscht, falls andere Programme dieselben Dateien verwenden.",
