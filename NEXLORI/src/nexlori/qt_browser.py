@@ -102,7 +102,9 @@ APP_VERSION = __version__
 
 def compatible_webengine_user_agent(user_agent: str) -> str:
     """Remove the QtWebEngine product token while keeping the real Chromium version."""
-    return re.sub(r"\\s+QtWebEngine/[^\\s]+", "", str(user_agent or "")).strip()
+    return re.sub(r"\s+QtWebEngine/[^\s]+", "", str(user_agent or "")).strip()
+
+
 SEARCH_PROVIDERS = {
     "DuckDuckGo": "https://duckduckgo.com/?q={}",
     "Google": "https://www.google.com/search?q={}",
@@ -1821,8 +1823,6 @@ QPushButton:disabled {{ color:{muted}; }}
             )
         self.extension_manager.setExtensionEnabled(extension, bool(enabled))
         self.settings.extensions_enabled[key] = bool(enabled)
-        if key == "ublock-origin-lite":
-            self.settings.ubol_enabled = bool(enabled)
         self._save_settings()
         self.statusBar().showMessage(f"{name}: {'aktiviert' if enabled else 'deaktiviert'}", 3000)
 
@@ -2038,7 +2038,7 @@ QPushButton:disabled {{ color:{muted}; }}
             answer = QMessageBox.question(
                 self,
                 "Website-Berechtigung",
-                f"{origin.toString()} möchte Zugriff auf {label}.\\n\\n"
+                f"{origin.toString()} möchte Zugriff auf {label}.\n\n"
                 "Nur erlauben, wenn du diese Website kennst und die Funktion gerade benötigst.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
