@@ -4,7 +4,7 @@
 
 Nexlori soll nicht einfach ein anderer Browser mit neuem Logo sein. Die Idee ist ein Browser mit eigener Identität, einer ruhigen und anpassbaren Oberfläche und Funktionen, die Rücksicht auf RAM, CPU, Akku und Datenverbrauch nehmen.
 
-> **Projektstand:** Nexlori 1.4.1 baut auf Qt WebEngine 6.12 / Chromium 140 auf. Enthalten sind eine anpassbare Browserleiste, Themes, einstellbare Website-Themes, ein Theme-Shop, der eingebaute Werbe- und Trackerschutz Nexlori Shield, lokale Add-ons, ein Manager für kompatible Manifest-V3-Erweiterungen, Spotify-Mini-Player, verschlüsselter Passwort-Tresor und automatische Updates. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
+> **Projektstand:** Nexlori 1.5.1 baut auf Qt WebEngine 6.12 / Chromium 140 auf. Enthalten sind eine anpassbare Browserleiste, Themes, einstellbare Website-Themes, ein Theme-Shop, der eingebaute Werbe- und Trackerschutz Nexlori Shield, lokale Add-ons, ein Manager für kompatible Manifest-V3-Erweiterungen, Spotify-Mini-Player, verschlüsselter Passwort-Tresor und automatische Updates. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
 
 ## Die Grundidee
 
@@ -86,7 +86,7 @@ Nexlori soll ein Browser sein, in dem Menschen ihre Persönlichkeit zeigen könn
 
 ## Projektstand der Umsetzung
 
-Stand: **Nexlori 1.5.0**. Die Windows-Anwendung nutzt Qt WebEngine 6.10+/Chromium für JavaScript, moderne CSS-Layouts, Bilder, Formulare, Cookies und Local Storage. Einzelne Webseiten können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren.
+Stand: **Nexlori 1.5.1**. Die Windows-Anwendung nutzt Qt WebEngine 6.10+/Chromium für JavaScript, moderne CSS-Layouts, Bilder, Formulare, Cookies und Local Storage. Einzelne Webseiten können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren.
 
 ### Nexlori für Windows herunterladen
 
