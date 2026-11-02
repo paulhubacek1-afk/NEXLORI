@@ -318,6 +318,24 @@ def test_game_route_opens_the_builtin_game_from_the_address_bar(window):
     assert html and "Nexlori" in html[0] and "Arcade" in html[0]
 
 
+
+
+def test_nexlor_game_alias_opens_from_address_bar_after_external_navigation(window):
+    view = window.current_view()
+    view._nexlori_start = False
+    view._nexlori_internal = None
+    window.navigate_view(view, "https://example.invalid/")
+    window.address.setText("nexlor://game")
+    window.address.setModified(True)
+    window.navigate_address()
+    pump(700)
+    assert view._nexlori_internal == "nexlori://game"
+    assert window.address.text() == "nexlori://game"
+    html = []
+    view.page().runJavaScript("document.body.innerText", html.append)
+    pump(250)
+    assert html and "Nexlori" in html[0] and "Arcade" in html[0]
+
 def test_internal_pages_survive_theme_change_and_reload(start_window):
     window = start_window
     view = window.current_view()
