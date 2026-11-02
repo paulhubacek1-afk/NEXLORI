@@ -31,6 +31,12 @@ def test_addon_and_browser_preferences_roundtrip(tmp_path):
     assert saved.problems() == []
 
 
+def test_adult_site_protection_cannot_be_disabled_in_saved_settings():
+    migrated = Settings.from_dict({"block_nsfw": False})
+    assert migrated.block_nsfw is True
+    assert Settings.from_dict({"block_nsfw": True}).block_nsfw is True
+
+
 def test_legacy_profiles_disable_unverified_ublock_lite():
     migrated = Settings.from_dict({
         "ubol_enabled": True,
