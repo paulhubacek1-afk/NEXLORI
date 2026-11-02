@@ -1,10 +1,13 @@
 import hashlib
+import json
 
 import pytest
 
 import urllib.error
 
-from nexlori.updater import UpdateError, check_for_update, download_verified_update, find_update, version_tuple
+from nexlori.updater import (
+    UpdateError, check_for_update, download_verified_update, find_update, installer_download_url, version_tuple,
+)
 
 
 def release(version, *, draft=False, prerelease=False, include_assets=True):
@@ -13,6 +16,7 @@ def release(version, *, draft=False, prerelease=False, include_assets=True):
         assets = [
             {"name": "Nexlori.exe", "browser_download_url": "https://example.test/Nexlori.exe"},
             {"name": "Nexlori.exe.sha256", "browser_download_url": "https://example.test/Nexlori.exe.sha256"},
+            {"name": "Nexlori-Setup.exe", "browser_download_url": "https://example.test/Nexlori-Setup.exe"},
         ]
     return {
         "tag_name": f"v{version}",
@@ -41,6 +45,22 @@ def test_find_update_selects_newest_complete_non_draft_release():
         release("0.4.0"),
     ])
     assert found["tag_name"] == "v0.4.1"
+
+
+def test_python_update_metadata_includes_windows_installer(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, _size):
+            return json.dumps([release("1.5.1")]).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: FakeResponse())
+    update = check_for_update("1.5.0")
+    assert installer_download_url(update) == "https://example.test/Nexlori-Setup.exe"
 
 
 def test_no_newer_update_returns_none():
