@@ -91,6 +91,7 @@ from .extension_utils import (
   )
 from .page_theme import build_page_theme_script
 from .start_page import build_start_page as _start_page
+from .game_page import game_page_html
 from .updater import (
     PERIODIC_CHECK_SECONDS, RELEASES_PAGE, can_self_update, discard_pending_update, pending_update,
     start_windows_self_update,
@@ -2593,6 +2594,8 @@ QPushButton:disabled {{ color:{muted}; }}
 
     # ------------------------------------------------------------------ Interne nexlori://-Links
     def _internal_page_html(self, label: str) -> str | None:
+        if label == "nexlori://game":
+            return game_page_html()
         if label == "nexlori://addons":
             return addons_page_html(self.theme)
         if label == "nexlori://home-network":
@@ -2624,6 +2627,8 @@ QPushButton:disabled {{ color:{muted}; }}
         query = QUrlQuery(url)
         if route == "settings":
             self.show_settings()
+        elif route == "game":
+            self._show_internal_page(view, "nexlori://game")
         elif route == "addons":
             self._show_internal_page(view, "nexlori://addons")
         elif route == "addons/builtin":

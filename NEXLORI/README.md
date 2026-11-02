@@ -86,7 +86,7 @@ Nexlori soll ein Browser sein, in dem Menschen ihre Persönlichkeit zeigen könn
 
 ## Projektstand der Umsetzung
 
-Stand: **Nexlori 1.4.0**. Die Windows-Anwendung nutzt Qt WebEngine 6.10+/Chromium für JavaScript, moderne CSS-Layouts, Bilder, Formulare, Cookies und Local Storage. Einzelne Webseiten können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren.
+Stand: **Nexlori 1.5.0**. Die Windows-Anwendung nutzt Qt WebEngine 6.10+/Chromium für JavaScript, moderne CSS-Layouts, Bilder, Formulare, Cookies und Local Storage. Einzelne Webseiten können trotzdem spezielle DRM-Komponenten benötigen oder eingebettete Browser blockieren.
 
 ### Nexlori für Windows herunterladen
 
@@ -113,6 +113,7 @@ Die EXE ist nicht digital signiert. Windows kann deshalb beim ersten Start eine 
 | Spotify | Abtrennbarer Mini-Player mit Spotify-Weboberfläche und Link-Eingabe. Anmeldung und Wiedergabe richten sich nach Spotify und dem jeweiligen Konto. |
 | Passwortmanager | Lokaler verschlüsselter Tresor mit Master-Passphrase und Passwortgenerator. Bei passenden HTTPS-Anmeldeformularen kann Nexlori nachfragen, ob der Nutzer die Zugangsdaten verschlüsselt speichern möchte. Ohne Zustimmung wird nicht gespeichert; automatisches Ausfüllen bleibt deaktiviert. |
 | Hintergrundbetrieb | Optional beim Schließen im Windows-Infobereich weiterlaufen; über das Tray-Menü erneut öffnen oder vollständig beenden. Falls Windows keinen Infobereich bereitstellt, schließt Nexlori normal. |
+| Arcade | Eigenes Offline-Minispiel „Neon Snake“ unter `nexlori://game`, mit Tastatursteuerung, Pause, Neustart und lokalem Rekord. |
 | Entwickler | F12 öffnet Chromium-DevTools; separates Diagnosefenster mit Browser-/Engine-Version, Betriebssystem, Renderer-Prozess, Tabs, Profilpfaden und Schutzstatus. |
 | Standardbrowser | In den Einstellungen „Standardbrowser“ wählen und anschließend die HTTP-/HTTPS-Zuordnung in den Windows-Einstellungen bestätigen. |
 | Updates | Automatischer Release-Check (Start + alle 6 Stunden), Hintergrund-Download über HTTPS, SHA-256-Prüfung und Installation beim Beenden oder per Update-Knopf. Stabile Releases werden automatisch erstellt, sobald die Version in `pyproject.toml` erhöht wird. |

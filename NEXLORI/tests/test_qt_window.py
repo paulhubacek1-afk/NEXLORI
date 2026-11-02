@@ -304,6 +304,20 @@ def test_start_page_tiles_work(start_window, monkeypatch):
     assert window.address.text() == "nexlori://home-network"
 
 
+def test_game_route_opens_the_builtin_game_from_the_address_bar(window):
+    window.address.setText("nexlori://game")
+    window.address.setModified(True)
+    window.navigate_address()
+    pump(700)
+    view = window.current_view()
+    assert view._nexlori_internal == "nexlori://game"
+    assert window.address.text() == "nexlori://game"
+    html = []
+    view.page().runJavaScript("document.body.innerText", html.append)
+    pump(250)
+    assert html and "Nexlori" in html[0] and "Arcade" in html[0]
+
+
 def test_internal_pages_survive_theme_change_and_reload(start_window):
     window = start_window
     view = window.current_view()

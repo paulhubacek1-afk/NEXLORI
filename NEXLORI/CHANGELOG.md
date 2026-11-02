@@ -1,5 +1,17 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.5.0 – Nexlori Arcade und interne Navigation
+
+### Neu
+- Eigenes, vollständig lokales Minispiel „Neon Snake“ unter `nexlori://game`; keine externen Spielserver oder Downloads erforderlich.
+- Tastatursteuerung mit Pfeiltasten/WASD, Pause, Neustart und lokal gespeicherter Bestpunktzahl.
+- Interne Spielseite lässt sich wie andere Nexlori-Seiten über die Adressleiste öffnen und über einen Browser-Link wieder verlassen.
+
+### Such-/Adressleiste
+- Regressionstests für Eingabeabschluss, Weiterleitungen, Fokusverhalten, Suchbegriffe und interne Nexlori-Adressen erweitert.
+- Interne `nexlori://`-Adressen bleiben Browser-Routen und werden nicht als Websuche behandelt.
+
+
 ## 1.4.1 – Browser-Kompatibilität und Shield-Korrekturen
 
 ### Behoben und verbessert
