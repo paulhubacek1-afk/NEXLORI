@@ -354,7 +354,7 @@ class BrowserPage(QWebEnginePage):
         if url.scheme().lower() in {"mailto", "tel"}:
             QDesktopServices.openUrl(url)
             return False
-        if url.scheme().lower() == "nexlori":
+        if url.scheme().lower() in {"nexlori", "nexlor"}:
             # Interne Links der Startseite und der Nexlori-Seiten (Einstellungen, Add-ons, Heimnetz, Discord …)
             if is_main_frame:
                 internal = QUrl(url)
@@ -1506,6 +1506,11 @@ QPushButton:disabled {{ color:{muted}; }}
             return
         view = self.current_view()
         if view is not None:
+            if scheme in {"nexlori", "nexlor"}:
+                # Direkte Eingaben in der Adressleiste sind ausdrücklich vom Benutzer ausgelöst.
+                # Sie dürfen auch von einer normalen Website aus interne Nexlori-Seiten öffnen.
+                self.handle_internal_url(view.page(), QUrl(target), allow_from_address_bar=True)
+                return
             self.navigate_view(view, target)
 
     def _refresh_open_start_pages(self) -> None:
@@ -2614,12 +2619,18 @@ QPushButton:disabled {{ color:{muted}; }}
             self.address.setModified(False)
             self.address.set_security("internal")
 
-    def handle_internal_url(self, page: QWebEnginePage, url: QUrl) -> None:
-        """Verarbeitet nexlori://-Links. Sie werden nur von Nexlori-eigenen Seiten angenommen, nie von Webseiten."""
+    def handle_internal_url(
+        self, page: QWebEnginePage, url: QUrl, *, allow_from_address_bar: bool = False
+    ) -> None:
+        """Verarbeitet interne Nexlori-Routen: Adressleisteneingaben und vertrauenswürdige Nexlori-Seiten sind erlaubt."""
         view = QWebEngineView.forPage(page)
         trusted = view is not None and (
-            getattr(view, "_nexlori_start", False) or getattr(view, "_nexlori_internal", None)
-        ) and view.url().toString() in ("", "about:blank")
+            allow_from_address_bar
+            or (
+                (getattr(view, "_nexlori_start", False) or getattr(view, "_nexlori_internal", None))
+                and view.url().toString() in ("", "about:blank")
+            )
+        )
         if not trusted:
             self.statusBar().showMessage("Interne Nexlori-Links funktionieren nur auf Nexlori-Seiten.", 4000)
             return
