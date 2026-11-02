@@ -318,8 +318,6 @@ def test_game_route_opens_the_builtin_game_from_the_address_bar(window):
     assert html and "Nexlori" in html[0] and "Arcade" in html[0]
 
 
-
-
 def test_nexlor_game_alias_opens_from_address_bar_after_external_navigation(window):
     view = window.current_view()
     view._nexlori_start = False
