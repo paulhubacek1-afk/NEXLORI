@@ -36,6 +36,13 @@ def test_path_rules_from_domain_list():
     assert not blocker.should_block("https://yandex.ru/search/?text=x", "https://example.ru/")
 
 
+def test_path_rules_do_not_block_unrelated_paths_with_same_prefix():
+    blocker = AdBlocker()
+    assert blocker.should_block("https://www.facebook.com/tr", "https://news.example/")
+    assert blocker.should_block("https://www.facebook.com/tr/events", "https://news.example/")
+    assert not blocker.should_block("https://www.facebook.com/travel/story", "https://news.example/")
+
+
 def test_listed_site_may_load_its_own_files_when_opened_directly():
     blocker = AdBlocker()
     assert not blocker.should_block("https://www.taboola.com/static/site.css", "https://www.taboola.com/")
@@ -118,6 +125,18 @@ def test_filter_store_ignores_tampered_entries(tmp_path):
     assert store.domains(["pgl"]) == set()
 
 
+def test_filter_store_handles_invalid_fetch_timestamp_and_sanitizes_domains(tmp_path):
+    store = FilterListStore(tmp_path)
+    store.path.write_text(json.dumps({
+        "pgl": {"fetched": "not-a-number", "domains": ["good.example"]}
+    }), encoding="utf-8")
+    assert store.info()["pgl"]["fetched"] == 0
+    assert store.needs_refresh(["pgl"], now=1000.0) == ["pgl"]
+
+    store.store("pgl", {"good.example", "github.com", "not a domain", "also-good.example"})
+    assert store.domains(["pgl"]) == {"good.example", "also-good.example"}
+
+
 def test_download_rejects_tiny_or_unknown_lists(monkeypatch):
     class FakeResponse:
         def __init__(self, payload):
@@ -155,3 +174,6 @@ def test_cosmetic_script_hides_ads_and_respects_allowlist():
     assert '"example.com"' in script
     assert "ytp-ad-skip-button" in script
     assert "__nexloriShield" in script
+    assert "const start = () =>" in script
+    assert "start();" in script
+    assert "new MutationObserver(skip).observe(root" in script

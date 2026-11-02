@@ -16,7 +16,7 @@ os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox --disable-gpu"
 
 from PySide6.QtCore import QEventLoop, QPoint, QTimer, QUrl  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWebEngineCore import QWebEnginePage  # noqa: E402
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission  # noqa: E402
 from PySide6.QtWidgets import QApplication, QTabWidget  # noqa: E402
 
 from nexlori import qt_browser as qb  # noqa: E402
@@ -336,3 +336,62 @@ def test_home_network_open_validates_targets(window):
         or "erlaubt" in window.statusBar().currentMessage().lower()
     window.handle_internal_url(view.page(), QUrl("nexlori://browser/retry?url=javascript%3Aalert(1)"))
     assert view._nexlori_start is True  # wurde nicht navigiert
+
+
+
+def test_site_microphone_permission_requires_explicit_consent(window, monkeypatch):
+    class Permission:
+        def __init__(self):
+            self.result = None
+
+        def isValid(self):
+            return True
+
+        def origin(self):
+            return QUrl("https://meet.example/")
+
+        def permissionType(self):
+            return QWebEnginePermission.PermissionType.MediaAudioCapture
+
+        def grant(self):
+            self.result = "granted"
+
+        def deny(self):
+            self.result = "denied"
+
+    request = Permission()
+    monkeypatch.setattr(
+        qb.QMessageBox, "question",
+        staticmethod(lambda *args, **kwargs: qb.QMessageBox.StandardButton.Yes),
+    )
+    window._handle_site_permission(request)
+    assert request.result == "granted"
+
+
+def test_site_geolocation_permission_is_denied_by_default(window, monkeypatch):
+    class Permission:
+        def __init__(self):
+            self.result = None
+
+        def isValid(self):
+            return True
+
+        def origin(self):
+            return QUrl("https://example.test/")
+
+        def permissionType(self):
+            return QWebEnginePermission.PermissionType.Geolocation
+
+        def grant(self):
+            self.result = "granted"
+
+        def deny(self):
+            self.result = "denied"
+
+    request = Permission()
+    monkeypatch.setattr(
+        qb.QMessageBox, "question",
+        staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Unexpected permission prompt"))),
+    )
+    window._handle_site_permission(request)
+    assert request.result == "denied"

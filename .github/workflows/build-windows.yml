@@ -81,9 +81,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,gaming]" pyinstaller
 
-      - name: Offizielles uBlock Origin Lite herunterladen und prüfen
-        run: python packaging/download_extensions.py
-
       - name: Tests ausführen
         run: python -m pytest -q
 
@@ -166,7 +163,6 @@ jobs:
           $hash = (Get-FileHash "dist\Nexlori.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  Nexlori.exe" | Out-File -Encoding ascii "dist\Nexlori.exe.sha256"
           Get-Content "dist\Nexlori.exe.sha256"
-          Copy-Item "src\nexlori\vendor\UBOL-LICENSE.txt" "dist\UBOL-LICENSE.txt"
 
       - name: Inno Setup installieren
         run: choco install innosetup --no-progress -y
@@ -203,7 +199,6 @@ jobs:
             NEXLORI/dist/Nexlori.exe
             NEXLORI/dist/Nexlori.exe.sha256
             NEXLORI/dist/Nexlori-Setup.exe
-            NEXLORI/dist/UBOL-LICENSE.txt
           if-no-files-found: error
           retention-days: 1
 
@@ -237,7 +232,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             throw "Stable release $tag already exists. Increase project version before publishing another release."
           }
-          gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe dist\UBOL-LICENSE.txt --title "Nexlori $tag" --generate-notes
+          gh release create $tag dist\Nexlori.exe dist\Nexlori.exe.sha256 dist\Nexlori-Setup.exe --title "Nexlori $tag" --generate-notes
           if ($LASTEXITCODE -ne 0) { throw "GitHub-Release konnte nicht erstellt werden." }
 
           # The updater requires the portable EXE and its checksum; never silently

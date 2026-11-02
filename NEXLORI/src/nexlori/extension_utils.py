@@ -4,17 +4,10 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-UBOLITE_VERSION = "2026.1012.1545"
-UBOLITE_URL = (
-    "https://github.com/uBlockOrigin/uBOL-home/releases/download/"
-    f"{UBOLITE_VERSION}/uBOLite_{UBOLITE_VERSION}.chromium.zip"
-)
-UBOLITE_SHA256 = "73909c8f26d608b00a99f446192630868bea4f947ba293c29bbd18ae948d903b"
 MAX_EXTENSION_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_EXTENSION_UNPACKED_BYTES = 300 * 1024 * 1024
 MAX_EXTENSION_FILES = 12000
@@ -36,22 +29,6 @@ def is_builtin_extension(name: str) -> bool:
     """Identify Chromium's built-in PDF/helper extensions so settings never disable them."""
     key = extension_key_from_name(name)
     return "pdf-viewer" in key or "chromium-pdf" in key or "hangouts" in key
-
-
-def bundled_ubolite_path() -> Path | None:
-    """Find the verified extension bundled by the Windows build workflow."""
-    candidates = [
-        Path(__file__).resolve().parent / "vendor" / "ubol.zip",
-        Path(getattr(sys, "_MEIPASS", "")) / "nexlori" / "vendor" / "ubol.zip",
-        Path(__file__).resolve().parents[2] / "packaging" / "vendor" / "ubol.zip",
-    ]
-    for candidate in candidates:
-        try:
-            if candidate.is_file() and candidate.stat().st_size <= MAX_EXTENSION_ARCHIVE_BYTES:
-                return candidate
-        except OSError:
-            continue
-    return None
 
 
 def _localized_name(manifest: dict[str, Any], base: Path | None, archive: zipfile.ZipFile | None) -> str:
@@ -164,6 +141,12 @@ def inspect_extension_package(path: str | Path) -> dict[str, Any]:
         name = _localized_name(manifest, base, archive)
         if not name or len(name) > 250:
             raise ExtensionPackageError("Der Add-on-Name ist ungültig.")
+        if extension_key_from_name(name) == "ublock-origin-lite":
+            raise ExtensionPackageError(
+                "uBlock Origin Lite wird von der aktuellen Qt-WebEngine-Erweiterungs-API nicht zuverlässig "
+                "unterstützt. Verwende stattdessen Nexlori Shield; andere kompatible Manifest-V3-Add-ons "
+                "können weiterhin installiert werden."
+            )
         permissions: list[str] = []
         for field in ("permissions", "optional_permissions", "host_permissions", "optional_host_permissions"):
             values = manifest.get(field, [])
@@ -217,7 +200,7 @@ def unpack_extension_package(path: str | Path, destination: str | Path) -> Path:
                 raise ExtensionPackageError("Das entpackte Add-on wäre größer als erlaubt.")
             root = temporary.resolve()
             for info in infos:
-                member = PurePosixPath(info.filename.replace("\\\\", "/"))
+                member = PurePosixPath(info.filename.replace("\\", "/"))
                 if member.is_absolute() or ".." in member.parts:
                     raise ExtensionPackageError("Die ZIP enthält einen unsicheren Dateipfad.")
                 # Reject Unix symlinks; extensions should only contain ordinary files/directories.

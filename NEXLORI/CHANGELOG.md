@@ -1,5 +1,21 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.4.1 – Browser-Kompatibilität und Shield-Korrekturen
+
+### Behoben und verbessert
+- Qt/PySide6 auf die geprüfte 6.12-Reihe eingegrenzt; Windows-Builds nutzen damit dieselbe WebEngine-Hauptversion wie die Entwicklungstests.
+- Den QtWebEngine-Produktzusatz aus dem User-Agent entfernt, ohne die tatsächliche Chromium-Version zu verändern.
+- Website-Berechtigungen für Mikrofon, Kamera und Browser-Benachrichtigungen werden nur nach ausdrücklicher Zustimmung erlaubt. Nicht unterstützte Berechtigungen und unsichere Ursprünge werden abgelehnt.
+- Fehler im kosmetischen Shield-Skript behoben, wenn das Dokument-Wurzelelement beim frühen Skriptstart noch nicht vorhanden ist.
+- Pfadregeln des Werbeblockers an Pfadgrenzen gebunden, damit beispielsweise /tr nicht versehentlich /travel blockiert.
+- Fehlerhafte Zeitstempel in gespeicherten Filterlisten werden sicher behandelt; gespeicherte Domainlisten werden vor dem Schreiben validiert.
+- ZIP-Erweiterungen werden vor dem Installieren sicher entpackt. Zuvor wurde der ZIP-Dateipfad direkt an die Qt-Erweiterungs-API übergeben.
+- uBlock Origin Lite wird vorerst nicht automatisch installiert oder als funktionsfähig beworben, da die benötigte Chrome-Erweiterungs-API in Qt WebEngine nicht vollständig verfügbar ist. Bestehende Profile werden migriert; Nexlori Shield bleibt unabhängig aktiv.
+- Der EXE-Selbsttest meldet nur noch tatsächlich ausgeführte WebEngine-Prüfungen und verwechselt nicht länger ein korrektes Erweiterungs-ZIP mit einer funktionierenden Erweiterung.
+
+### Hinweis
+- Ein erfolgreicher Build garantiert keine Kompatibilität mit jeder externen Website. Anmeldung, DRM, Captchas, WebRTC und besondere Website-Funktionen müssen mit realen Diensten gesondert geprüft werden.
+
 ## 1.4.0 – Automatische Updates, Nexlori Shield und neue Themes
 
 ### Neu und verbessert

@@ -56,7 +56,17 @@ def test_localized_manifest_name_is_resolved(tmp_path):
         },
         localized={"extName": {"message": "uBlock Origin Lite"}},
     )
-    assert inspect_extension_package(path)["name"] == "uBlock Origin Lite"
+    with pytest.raises(ExtensionPackageError, match="uBlock Origin Lite"):
+        inspect_extension_package(path)
+
+
+def test_unverified_ublock_lite_package_is_rejected(tmp_path):
+    path = _write_zip(
+        tmp_path / "ubol.zip",
+        {"manifest_version": 3, "name": "uBlock Origin Lite", "version": "2026.1"},
+    )
+    with pytest.raises(ExtensionPackageError, match="Qt-WebEngine"):
+        inspect_extension_package(path)
 
 
 def test_manifest_v2_is_rejected(tmp_path):

@@ -23,6 +23,11 @@ _LOCAL_RE = re.compile(r"^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01
 _PATH_RE = re.compile(r"^([A-Za-z]:[\\/]|/|\\\\|~)")
 
 
+def compatible_webengine_user_agent(user_agent: str) -> str:
+    """Remove the QtWebEngine token while preserving the actual Chromium version."""
+    return re.sub(r"\s+QtWebEngine/[^\s]+", "", str(user_agent or "")).strip()
+
+
 # ----------------------------------------------------------------------------- Adressen
 def normalize_input(text: str, search_url: str) -> str:
     """Macht aus der Adressleisten-Eingabe eine Adresse: URL, lokale Datei oder Suchanfrage."""

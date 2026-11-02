@@ -4,7 +4,7 @@
 
 Nexlori soll nicht einfach ein anderer Browser mit neuem Logo sein. Die Idee ist ein Browser mit eigener Identität, einer ruhigen und anpassbaren Oberfläche und Funktionen, die Rücksicht auf RAM, CPU, Akku und Datenverbrauch nehmen.
 
-> **Projektstand:** Nexlori 1.4.0 baut auf Qt WebEngine 6.10+/Chromium auf. Sie enthält eine anpassbare Browserleiste, über 100 Themes, einstellbare Website-Themes, einen Theme-Shop, den eingebauten Werbeblocker Nexlori Shield, eingebaute Add-ons, uBlock Origin Lite, einen MV3-Add-on-Manager, Spotify-Mini-Player, verschlüsselten Passwort-Tresor, Einstellungen und vollautomatische Updates. Der Build durchläuft automatische Tests und einen Windows-EXE-Selbsttest. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
+> **Projektstand:** Nexlori 1.4.1 baut auf Qt WebEngine 6.12 / Chromium 140 auf. Enthalten sind eine anpassbare Browserleiste, Themes, einstellbare Website-Themes, ein Theme-Shop, der eingebaute Werbe- und Trackerschutz Nexlori Shield, lokale Add-ons, ein Manager für kompatible Manifest-V3-Erweiterungen, Spotify-Mini-Player, verschlüsselter Passwort-Tresor und automatische Updates. Nicht jede Website oder Erweiterung ist garantiert kompatibel.
 
 ## Die Grundidee
 
@@ -109,7 +109,7 @@ Die EXE ist nicht digital signiert. Windows kann deshalb beim ersten Start eine 
 | Themes | Basis-, Gothic-, Cyberpunk-, Wald-, Ozean-, Sakura-, Kaffee- und Mitternacht-Themes plus 60 Pride-Farbwelten für häufige Flaggen aus Gender-, Sexualitäts-, Romantik- und Ace-Spektrum. Drei Pride-Favoriten sind direkt auswählbar. |
 | Website-Farben | Das lokale Theme-CSS wird bei jedem neuen Dokument bei DOM-Ready angewendet. Es bleibt optional und lässt sich in den Einstellungen abschalten; Webseiten können bestimmte Stile weiterhin selbst überschreiben. |
 | Werbeblocker | Nexlori Shield blockiert Werbe- und Tracking-Anfragen direkt im Netzwerk, blendet Werbeflächen aus, überspringt YouTube-Werbung und aktualisiert seine Filterlisten automatisch. Pro Website pausierbar. |
-| Add-ons | uBlock Origin Lite ist zusätzlich standardmäßig installiert und aktiv. Der Add-on-Manager kann kompatible Manifest-V3-ZIPs und entpackte Ordner installieren, aktivieren, deaktivieren oder entfernen. |
+| Add-ons | Der Add-on-Manager kann kompatible Manifest-V3-ZIPs und entpackte Ordner installieren, aktivieren, deaktivieren oder entfernen. Nicht alle Chrome-Erweiterungen sind mit Qt WebEngine kompatibel. |
 | Spotify | Abtrennbarer Mini-Player mit Spotify-Weboberfläche und Link-Eingabe. Anmeldung und Wiedergabe richten sich nach Spotify und dem jeweiligen Konto. |
 | Passwortmanager | Lokaler verschlüsselter Tresor mit Master-Passphrase und Passwortgenerator. Bei passenden HTTPS-Anmeldeformularen kann Nexlori nachfragen, ob der Nutzer die Zugangsdaten verschlüsselt speichern möchte. Ohne Zustimmung wird nicht gespeichert; automatisches Ausfüllen bleibt deaktiviert. |
 | Hintergrundbetrieb | Optional beim Schließen im Windows-Infobereich weiterlaufen; über das Tray-Menü erneut öffnen oder vollständig beenden. Falls Windows keinen Infobereich bereitstellt, schließt Nexlori normal. |
@@ -118,7 +118,7 @@ Die EXE ist nicht digital signiert. Windows kann deshalb beim ersten Start eine 
 | Updates | Automatischer Release-Check (Start + alle 6 Stunden), Hintergrund-Download über HTTPS, SHA-256-Prüfung und Installation beim Beenden oder per Update-Knopf. Stabile Releases werden automatisch erstellt, sobald die Version in `pyproject.toml` erhöht wird. |
 | Feedback | [GitHub-Probleme und Verbesserungen](https://github.com/paulhubacek1-afk/NEXLORI/issues/new) oder E-Mail an [nexlori-browser@gmx.at](mailto:nexlori-browser@gmx.at). |
 
-Nexlori 1.4.0 ist weiterhin nicht unabhängig sicherheitszertifiziert. Die Anmeldeerkennung ist ein Komfortmerkmal, keine Garantie, dass jedes Login-Formular erkannt wird. Automatisches Einfüllen von Passwörtern ist noch nicht aktiviert. Verwende ihn nicht als einzigen Passwortmanager für besonders sensible Konten oder Online-Banking. Qt WebEngine unterstützt derzeit Manifest-V3-Erweiterungen; deshalb wird uBlock Origin Lite und nicht die separate Manifest-V2-Version eingebunden. Siehe [Änderungsprotokoll](CHANGELOG.md).
+Nexlori 1.4.1 ist weiterhin nicht unabhängig sicherheitszertifiziert. Die Anmeldeerkennung ist ein Komfortmerkmal, keine Garantie, dass jedes Login-Formular erkannt wird. Automatisches Einfüllen von Passwörtern ist noch nicht aktiviert. Verwende ihn nicht als einzigen Passwortmanager für besonders sensible Konten oder Online-Banking. Qt WebEngine unterstützt Manifest-V3-Erweiterungen, aber nicht sämtliche Chrome-Erweiterungs-APIs. Deshalb wird uBlock Origin Lite derzeit nicht als funktionierende Erweiterung versprochen oder automatisch installiert. Der eingebaute Nexlori Shield arbeitet unabhängig davon auf Netzwerkebene. Andere Manifest-V3-Erweiterungen müssen mit Qt WebEngine kompatibel sein. Siehe [Änderungsprotokoll](CHANGELOG.md).
 
 ### Entwickeln
 
