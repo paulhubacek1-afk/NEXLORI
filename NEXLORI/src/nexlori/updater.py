@@ -37,6 +37,17 @@ def version_tuple(value: str) -> tuple[int, int, int, int]:
     return int(major), int(minor), int(patch), int(build or 0)
 
 
+def installer_download_url(release: dict[str, Any]) -> str | None:
+    """Return the HTTPS Windows-installer URL included in a normalized GitHub release."""
+    for asset in release.get("assets") or []:
+        if not isinstance(asset, dict) or asset.get("name") != "Nexlori-Setup.exe":
+            continue
+        url = str(asset.get("url") or asset.get("browser_download_url") or "").strip()
+        if url.startswith("https://"):
+            return url
+    return None
+
+
 def find_update(current_version: str, releases: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Find the newest non-draft published release with both expected assets."""
     current = version_tuple(current_version)
@@ -101,7 +112,7 @@ def check_for_update(current_version: str, timeout: float = 8.0) -> dict[str, An
             {"name": str(a.get("name")), "url": str(a.get("browser_download_url"))}
             for a in release.get("assets", [])
             if isinstance(a, dict)
-            and a.get("name") in {"Nexlori.exe", "Nexlori.exe.sha256"}
+            and a.get("name") in {"Nexlori.exe", "Nexlori.exe.sha256", "Nexlori-Setup.exe"}
             and a.get("browser_download_url")
         ],
     }

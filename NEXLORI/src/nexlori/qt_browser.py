@@ -93,8 +93,8 @@ from .page_theme import build_page_theme_script
 from .start_page import build_start_page as _start_page
 from .game_page import game_page_html
 from .updater import (
-    PERIODIC_CHECK_SECONDS, RELEASES_PAGE, can_self_update, discard_pending_update, pending_update,
-    start_windows_self_update,
+    PERIODIC_CHECK_SECONDS, RELEASES_PAGE, can_self_update, discard_pending_update, installer_download_url,
+    pending_update, start_windows_self_update,
 )
 
 APP_NAME = "Nexlori"
@@ -383,6 +383,8 @@ class NexloriWindow(QMainWindow):
     ):
         super().__init__()
         self.settings = settings
+        # The adult-site block is a fixed safety default, not a user profile toggle.
+        self.settings.block_nsfw = True
         self.settings.search_url = canonical_search_url(settings.search_url)
         self.settings_path = settings_path
         self.custom_titlebar = bool(settings.custom_titlebar)
@@ -2441,7 +2443,24 @@ QPushButton:disabled {{ color:{muted}; }}
                     QMessageBox.information(self, "Nexlori-Update", f"Du verwendest Nexlori {APP_VERSION}. Das ist die neueste Version.")
                 return
             if not can_self_update():
-                # Entwicklungs- oder Nicht-Windows-Version: nur auf die Release-Seite hinweisen.
+                # A Python-started Windows app cannot replace the interpreter; offer the signed release installer.
+                installer_url = installer_download_url(release)
+                if os.name == "nt" and installer_url:
+                    self.statusBar().showMessage(
+                        f"Nexlori {release['version']} ist verfügbar. Windows-Installer herunterladen.", 8000
+                    )
+                    if not silent:
+                        answer = QMessageBox.question(
+                            self, "Nexlori-Update verfügbar",
+                            f"Du startest Nexlori über Python. Diese laufende Python-Version kann sich nicht selbst "
+                            f"ersetzen. Soll der Windows-Installer für Nexlori {release['version']} heruntergeladen werden?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                            QMessageBox.StandardButton.Yes,
+                        )
+                        if answer == QMessageBox.StandardButton.Yes:
+                            QDesktopServices.openUrl(QUrl(installer_url))
+                    return
+                # Non-Windows runs or releases without the setup asset use the release page.
                 self.statusBar().showMessage(f"Nexlori {release['version']} ist verfügbar.", 8000)
                 if not silent:
                     answer = QMessageBox.question(
