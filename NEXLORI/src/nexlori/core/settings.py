@@ -158,6 +158,9 @@ class Settings:
     def from_dict(cls, data: dict) -> "Settings":
         known = {f.name for f in fields(cls)}
         values = {k: v for k, v in data.items() if k in known}  # unbekannte Schlüssel ignorieren
+        # Adult-site protection is mandatory; ignore a previously saved opt-out.
+        if values.get("block_nsfw") is False:
+            values["block_nsfw"] = True
         # uBlock Origin Lite nutzt eine Chrome-WebExtensions-API, die Qt WebEngine
         # nicht vollständig bereitstellt. Alte Profile daher sicher deaktivieren.
         legacy_ubol_enabled = values.get("ubol_enabled", False)
