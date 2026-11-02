@@ -1,5 +1,11 @@
 # Nexlori – Änderungsprotokoll
 
+## 1.5.1 – Sicherer Website-Schutz und Python-Updates
+
+### Behoben und verbessert
+- Der Schutz vor Erwachsenenseiten bleibt auch bei älteren Profilen aktiv, die zuvor eine deaktivierte Einstellung gespeichert hatten.
+- Beim Start über Python wird unter Windows der passende Nexlori-Installer zum Aktualisieren angeboten. Installierte Windows-EXE-Versionen behalten den SHA-256-geprüften Selbst-Updater.
+
 ## 1.5.0 – Nexlori Arcade und interne Navigation
 
 ### Neu
