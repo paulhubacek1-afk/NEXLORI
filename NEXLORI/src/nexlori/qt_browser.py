@@ -2622,7 +2622,7 @@ QPushButton:disabled {{ color:{muted}; }}
     def handle_internal_url(
         self, page: QWebEnginePage, url: QUrl, *, allow_from_address_bar: bool = False
     ) -> None:
-        """Verarbeitet nexlori://-Links. Sie werden nur von Nexlori-eigenen Seiten angenommen, nie von Webseiten."""
+        """Verarbeitet interne Nexlori-Routen: Adressleisteneingaben und vertrauenswürdige Nexlori-Seiten sind erlaubt."""
         view = QWebEngineView.forPage(page)
         trusted = view is not None and (
             allow_from_address_bar
